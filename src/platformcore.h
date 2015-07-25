@@ -15,7 +15,10 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <condition_variable>
 #include <vector>
+#include <deque>
+#include <functional>
 
 namespace HandmadePlatform
 {
@@ -61,6 +64,42 @@ namespace HandmadePlatform
   };
 
 
+
+  //|---------------------- WorkQueue -----------------------------------------
+  //|--------------------------------------------------------------------------
+
+  class WorkQueue
+  {
+    public:
+
+      WorkQueue(int threads = 4);
+      ~WorkQueue();
+
+      template<typename Func>
+      void push(Func &&func)
+      {
+        std::unique_lock<std::mutex> lock(m_mutex);
+
+        m_queue.push_back(std::forward<Func>(func));
+
+        m_signal.notify_one();
+      }
+
+    private:
+
+      std::atomic<bool> m_done;
+
+      std::mutex m_mutex;
+
+      std::condition_variable m_signal;
+
+      std::deque<std::function<void()>> m_queue;
+
+      std::vector<std::thread> m_threads;
+  };
+
+
+
   //|---------------------- PlatformCore --------------------------------------
   //|--------------------------------------------------------------------------
 
@@ -68,7 +107,7 @@ namespace HandmadePlatform
   {
     public:
 
-      void init(size_t gamememorysize);
+      void initialise(size_t gamememorysize);
 
     public:
 
@@ -105,6 +144,11 @@ namespace HandmadePlatform
       void close_type_enumerator(type_enumerator enumerator) override;
 
 
+      // work queue
+
+      void submit_work(void (*func)(PlatformInterface &, void*, void*), void *ldata, void *rdata) override;
+
+
       // misc
 
       void terminate() override;
@@ -120,6 +164,8 @@ namespace HandmadePlatform
       std::vector<char> m_gamememory;
       std::vector<char> m_gamescratchmemory;
       std::vector<char> m_renderscratchmemory;
+
+      WorkQueue m_workqueue;
   };
 
 } // namespace

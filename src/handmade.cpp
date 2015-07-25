@@ -21,7 +21,6 @@ GameState::GameState(PlatformInterface &platform)
   : assets(platform.gamememory)
 {
   assert(this == platform.gamememory.data);
-
 }
 
 
@@ -41,6 +40,8 @@ extern "C" void game_init(PlatformInterface &platform)
 extern "C" void game_reinit(PlatformInterface &platform)
 {
 //  GameState &state = *static_cast<GameState*>(platform.gamememory.data);
+
+  cout << "ReInit" << endl;
 }
 
 
@@ -55,5 +56,4 @@ extern "C" void game_update(PlatformInterface &platform, GameInput const &input,
 extern "C" void game_render(PlatformInterface &platform)
 {
 //  GameState &state = *static_cast<GameState*>(platform.gamememory.data);
-//  cout << "Render" << endl;
 }

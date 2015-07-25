@@ -19,8 +19,8 @@ namespace HandmadePlatform
   //|---------------------- GameMemory ----------------------------------------
   //|--------------------------------------------------------------------------
 
-  ///////////////////////// GameMemory::init //////////////////////////////////
-  void gamememory_init(GameMemory &pool, void *data, size_t capacity)
+  ///////////////////////// GameMemory::initialise ////////////////////////////
+  void gamememory_initialise(GameMemory &pool, void *data, size_t capacity)
   {
     pool.size = 0;
     pool.data = data;
@@ -43,11 +43,9 @@ namespace HandmadePlatform
   ///////////////////////// InputBuffer::grab /////////////////////////////////
   GameInput InputBuffer::grab()
   {
+    lock_guard<mutex> lock(m_mutex);
+
     GameInput input;
-
-    input.terminaterequest = false;
-
-    lock_guard<mutex> M(m_mutex);
 
     for(auto &evt : m_events)
     {
@@ -77,12 +75,61 @@ namespace HandmadePlatform
 
 
 
+  //|---------------------- WorkQueue -----------------------------------------
+  //|--------------------------------------------------------------------------
+
+  ///////////////////////// WorkQueue::Constructor ////////////////////////////
+  WorkQueue::WorkQueue(int threads)
+  {
+    m_done = false;
+
+    for(int i = 0; i < threads; ++i)
+    {
+      m_threads.push_back(std::thread([=]() {
+
+        while (!m_done)
+        {
+          std::function<void()> work;
+
+          {
+            unique_lock<std::mutex> lock(m_mutex);
+
+            while (m_queue.empty())
+            {
+              m_signal.wait(lock);
+            }
+
+            work = std::move(m_queue.front());
+
+            m_queue.pop_front();
+          }
+
+          work();
+        }
+
+      }));
+    }
+  }
+
+
+  ///////////////////////// WorkQueue::Destructor /////////////////////////////
+  WorkQueue::~WorkQueue()
+  {
+    for(size_t i = 0; i < m_threads.size(); ++i)
+      push([=]() { m_done = true; });
+
+    for(auto &thread : m_threads)
+      thread.join();
+  }
+
+
+
   //|---------------------- PlatformCore --------------------------------------
   //|--------------------------------------------------------------------------
 
 
-  ///////////////////////// PlatformCore::init ////////////////////////////////
-  void PlatformCore::init(std::size_t gamememorysize)
+  ///////////////////////// PlatformCore::initialise //////////////////////////
+  void PlatformCore::initialise(std::size_t gamememorysize)
   {
     m_terminaterequested = false;
 
@@ -90,11 +137,11 @@ namespace HandmadePlatform
     m_gamescratchmemory.resize(256*1024*1024);
     m_renderscratchmemory.resize(256*1024*1024);
 
-    gamememory_init(gamememory, m_gamememory.data(), m_gamememory.size());
+    gamememory_initialise(gamememory, m_gamememory.data(), m_gamememory.size());
 
-    gamememory_init(gamescratchmemory, m_gamescratchmemory.data(), m_gamescratchmemory.size());
+    gamememory_initialise(gamescratchmemory, m_gamescratchmemory.data(), m_gamescratchmemory.size());
 
-    gamememory_init(renderscratchmemory, m_renderscratchmemory.data(), m_renderscratchmemory.size());
+    gamememory_initialise(renderscratchmemory, m_renderscratchmemory.data(), m_renderscratchmemory.size());
   }
 
 
@@ -115,7 +162,7 @@ namespace HandmadePlatform
   {
     auto file = static_cast<platform_handle_t*>(handle);
 
-    lock_guard<mutex> M(file->lock);
+    lock_guard<mutex> lock(file->lock);
 
     file->fio.seekg(position);
 
@@ -175,10 +222,18 @@ namespace HandmadePlatform
   }
 
 
+  ///////////////////////// PlatformCore::submit_work ///////////////////////
+  void PlatformCore::submit_work(void (*func)(PlatformInterface &, void *, void*), void *ldata, void *rdata)
+  {
+    m_workqueue.push([=]() { func(*this, ldata, rdata); });
+  }
+
+
   ///////////////////////// PlatformCore::terminate ///////////////////////////
   void PlatformCore::terminate()
   {
     m_terminaterequested = true;
   }
+
 
 } // namespace

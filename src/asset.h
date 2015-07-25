@@ -11,6 +11,7 @@
 
 #include "platform.h"
 #include "memory.h"
+#include <atomic>
 #include <vector>
 #include <unordered_map>
 
@@ -56,9 +57,11 @@ class Asset
 
     std::vector<AssetTag, StackAllocator<AssetTag>> tags;
 
-    HandmadePlatform::PlatformInterface::handle_t file;
+    HandmadePlatform::PlatformInterface::handle_t filehandle;
 
     uint64_t fileposition;
+
+    std::size_t datasize;
 
     union
     {
@@ -73,6 +76,8 @@ class Asset
         int channels;
       };
     };
+
+    size_t slot;
 };
 
 
@@ -91,9 +96,33 @@ class AssetManager
 
     void initialise(std::vector<Asset, StackAllocator<Asset>> const &assets);
 
+  protected:
+
+    void fetch(HandmadePlatform::PlatformInterface &platform, Asset *asset);
+
+    static void background_loader(HandmadePlatform::PlatformInterface &platform, void *ldata, void *rdata);
+
   private:
 
+    allocator_type m_allocator;
+
     std::unordered_multimap<AssetType, Asset, std::hash<AssetType>, std::equal_to<>, std::scoped_allocator_adaptor<allocator_type>> m_assets;
+
+    struct Slot
+    {
+      enum class State
+      {
+        Empty,
+        Loading,
+        Loaded
+      };
+
+      std::atomic<State> state;
+
+      void *data;
+    };
+
+    Slot *m_slots;
 };
 
 // Initialise

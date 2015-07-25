@@ -102,7 +102,7 @@ void Game::init()
   if (!game_init || !game_update || !game_render)
     throw std::runtime_error("Unable to init game code");
 
-  m_platform.init(1*1024*1024*1024);
+  m_platform.initialise(1*1024*1024*1024);
 
   game_init(m_platform);
 }

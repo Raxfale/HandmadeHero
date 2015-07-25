@@ -36,7 +36,9 @@ Asset::Asset(Asset const &other, allocator_type const &allocator)
 
 ///////////////////////// AssetManager::Constructor /////////////////////////
 AssetManager::AssetManager(allocator_type const &allocator)
-  : m_assets(allocator)
+  : m_allocator(allocator),
+    m_assets(allocator),
+    m_slots(nullptr)
 {
 }
 
@@ -47,9 +49,53 @@ void AssetManager::initialise(std::vector<Asset, StackAllocator<Asset>> const &a
   for(auto &asset : assets)
     m_assets.insert({ asset.type, asset });
 
+  m_slots = new(allocate<Slot>(m_allocator, m_assets.size())) Slot[m_assets.size()];
+
+  size_t slot = 0;
+  for(auto &asset : m_assets)
+  {
+    m_slots[slot].state = Slot::State::Empty;
+
+    asset.second.slot = slot++;
+  }
+
   cout << "Initialised " << m_assets.size() << " assets" << endl;
 }
 
+
+///////////////////////// AssetManager::background_loader ///////////////////
+void AssetManager::background_loader(HandmadePlatform::PlatformInterface &platform, void *ldata, void *rdata)
+{
+  Asset &asset = *static_cast<Asset*>(rdata);
+  Slot &slot = static_cast<AssetManager*>(ldata)->m_slots[asset.slot];
+
+  try
+  {
+    platform.read_handle(asset.filehandle, asset.fileposition + sizeof(PackChunk), slot.data, asset.datasize);
+  }
+  catch(exception &e)
+  {
+    cerr << "Background Read Error: " << e.what() << endl;
+  }
+
+  slot.state = Slot::State::Loaded;
+
+  cout << "Asset " << asset.slot << " loaded" << endl;
+}
+
+
+///////////////////////// AssetManager::fetch ///////////////////////////////
+void AssetManager::fetch(HandmadePlatform::PlatformInterface &platform, Asset *asset)
+{
+  Slot::State expected = Slot::State::Empty;
+
+  if (atomic_compare_exchange_strong(&m_slots[asset->slot].state, &expected, Slot::State::Loading))
+  {
+    m_slots[asset->slot].data = allocate<char>(m_allocator, asset->datasize);
+
+    platform.submit_work(background_loader, this, asset);
+  }
+}
 
 
 ///////////////////////// initialise_asset_system ///////////////////////////
@@ -76,7 +122,7 @@ void initialise_asset_system(HandmadePlatform::PlatformInterface &platform, Asse
 
       Asset asset(platform.gamescratchmemory);
 
-      asset.file = handle;
+      asset.filehandle = handle;
 
       while (true)
       {
@@ -118,6 +164,7 @@ void initialise_asset_system(HandmadePlatform::PlatformInterface &platform, Asse
 
               asset.width = imageheader.width;
               asset.height = imageheader.height;
+              asset.datasize = imageheader.width * imageheader.height * sizeof(uint32_t);
 
               break;
             }

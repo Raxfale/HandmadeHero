@@ -75,12 +75,10 @@ T *StackAllocator<T, alignment>::allocate(std::size_t n)
 {
   std::size_t size = n * sizeof(T);
 
-  void *result = nullptr;
-
   if (m_arena->capacity < m_arena->size + alignment + size)
     throw std::bad_alloc();
 
-  result = static_cast<char*>(m_arena->data) + m_arena->size;
+  void *result = static_cast<char*>(m_arena->data) + m_arena->size;
 
   std::align(alignment, size, result, m_arena->capacity);
 
@@ -225,11 +223,19 @@ void StackAllocatorWithFreelist<T, alignment>::deallocate(T * const ptr, std::si
 //|--------------------------------------------------------------------------
 
 
+///////////////////////// inarena ///////////////////////////////////////////
+template<typename T>
+bool inarena(HandmadePlatform::GameMemory &arena, T *ptr)
+{
+  return ptr >= arena.data && ptr < (void*)((char*)arena.data + arena.size);
+}
+
+
 ///////////////////////// allocate //////////////////////////////////////////
 template<typename T>
-T *allocate(HandmadePlatform::GameMemory &arena)
+T *allocate(StackAllocator<T> allocator, std::size_t n = 1)
 {
-  return StackAllocator<T>(arena).allocate(1);
+  return allocator.allocate(n);
 }
 
 
