@@ -26,7 +26,7 @@ namespace std
 #endif
 
 #if 0
-  void *align(std::size_t alignment, std::size_t size, void *&ptr, std::size_t &space)
+  inline void *align(std::size_t alignment, std::size_t size, void *&ptr, std::size_t &space)
   {
     auto pn = reinterpret_cast<std::size_t>(ptr);
     auto aligned = (pn + alignment - 1) & -alignment;

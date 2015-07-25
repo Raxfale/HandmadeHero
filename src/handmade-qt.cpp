@@ -18,9 +18,17 @@
 #include <QFileInfo>
 #include <QDateTime>
 #include <iostream>
+#include <chrono>
 
 using namespace std;
+using namespace std::literals;
 using namespace HandmadePlatform;
+
+#ifdef _WIN32
+  const char *libhandmade = "handmade.dll";
+#else
+  const char *libhandmade = "./libhandmade.so";
+#endif
 
 
 //|---------------------- Platform ------------------------------------------
@@ -89,10 +97,18 @@ Game::Game()
 ///////////////////////// Game::init ////////////////////////////////////////
 void Game::init()
 {
+#ifdef _WIN32
+
   QFile::remove("handmade-temp.dll");
-  QFile::copy("handmade.dll", "handmade-temp.dll");
+  QFile::copy(libhandmade, "handmade-temp.dll");
 
   m_game.setFileName("handmade-temp.dll");
+
+#else
+
+  m_game.setFileName(libhandmade);
+
+#endif
 
   game_init = (game_init_t)m_game.resolve("game_init");
   game_reinit = (game_reinit_t)m_game.resolve("game_reinit");
@@ -319,11 +335,11 @@ int main(int argc, char **argv)
       tick.restart();
 
 #if 1
-      static QDateTime lastmodified = QFileInfo("handmade.dll").lastModified();
+      static QDateTime lastmodified = QFileInfo(libhandmade).lastModified();
 
-      if (QFileInfo("handmade.dll").lastModified() != lastmodified)
+      if (QFileInfo(libhandmade).lastModified() != lastmodified)
       {
-        while ((lastmodified = QFileInfo("handmade.dll").lastModified()).addSecs(1) > QDateTime::currentDateTime())
+        while ((lastmodified = QFileInfo(libhandmade).lastModified()).addSecs(1) > QDateTime::currentDateTime())
           ;
 
         game.reinit();

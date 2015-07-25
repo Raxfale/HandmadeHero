@@ -21,8 +21,8 @@ namespace HandmadePlatform
 
     struct GameMemory
     {
-      size_t size;
-      size_t capacity;
+      std::size_t size;
+      std::size_t capacity;
 
       void *data;
     };
