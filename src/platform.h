@@ -54,8 +54,6 @@ namespace HandmadePlatform
 
       typedef void *handle_t;
 
-      virtual void open_handle(handle_t handle) = 0;
-
       virtual void read_handle(handle_t handle, uint64_t position, void *buffer, std::size_t n) = 0;
 
       virtual void close_handle(handle_t handle) = 0;
@@ -90,5 +88,5 @@ namespace HandmadePlatform
 typedef void (*game_init_t)(HandmadePlatform::PlatformInterface &platform);
 typedef void (*game_reinit_t)(HandmadePlatform::PlatformInterface &platform);
 typedef void (*game_update_t)(HandmadePlatform::PlatformInterface &platform, HandmadePlatform::GameInput const &input, float dt);
-typedef void (*game_render_t)(HandmadePlatform::PlatformInterface &platform);
+typedef void (*game_render_t)(HandmadePlatform::PlatformInterface &platform, uint32_t *bits);
 

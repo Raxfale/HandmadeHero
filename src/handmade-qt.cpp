@@ -12,6 +12,10 @@
 #include <QGuiApplication>
 #include <QOpenGLWindow>
 #include <QOpenGLFunctions>
+#include <QOpenGLTexture>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLBuffer>
+#include <QOpenGLVertexArrayObject>
 #include <QLibrary>
 #include <QElapsedTimer>
 #include <QKeyEvent>
@@ -29,6 +33,7 @@ using namespace HandmadePlatform;
 #else
   const char *libhandmade = "./libhandmade.so";
 #endif
+
 
 
 //|---------------------- Platform ------------------------------------------
@@ -58,7 +63,7 @@ class Game
 
     void update(float dt);
 
-    void render();
+    void render(uint32_t *bits);
 
     void terminate();
 
@@ -165,11 +170,11 @@ void Game::update(float dt)
 
 
 ///////////////////////// Game::render //////////////////////////////////////
-void Game::render()
+void Game::render(uint32_t *bits)
 {
   m_platform.renderscratchmemory.size = 0;
 
-  game_render(m_platform);
+  game_render(m_platform, bits);
 }
 
 
@@ -202,6 +207,13 @@ class HandmadeWindow : public QOpenGLWindow
   private:
 
     Game *m_game;
+
+    QImage *m_buffer;
+
+    QOpenGLTexture *m_texture;
+    QOpenGLShaderProgram *m_program;
+    QOpenGLBuffer *m_vertexbuffer;
+    QOpenGLVertexArrayObject *m_vertexarrayobject;
 };
 
 
@@ -217,7 +229,9 @@ HandmadeWindow::HandmadeWindow(Game *game)
 
   setFormat(format);
 
-  resize(960, 540);
+  m_buffer = new QImage(960, 540, QImage::Format_ARGB32);
+
+  resize(m_buffer->width(), m_buffer->height());
 
   show();
 }
@@ -243,6 +257,63 @@ bool HandmadeWindow::event(QEvent *event)
 ///////////////////////// HandmadeWindow::initializeGL //////////////////////
 void HandmadeWindow::initializeGL()
 {
+  const char *vs =
+     "attribute highp vec4 vertex_pos;\n"
+     "attribute mediump vec4 vertex_uv;\n"
+     "varying mediump vec4 uv;\n"
+     "uniform mediump mat4 world;\n"
+     "void main(void)\n"
+     "{\n"
+     "  uv = vertex_uv;\n"
+     "  gl_Position = world * vertex_pos;\n"
+     "}\n";
+
+  const char *fs =
+     "uniform sampler2D texture;\n"
+     "varying mediump vec4 uv;\n"
+     "void main(void)\n"
+     "{\n"
+     "  gl_FragColor = texture2D(texture, uv.st);\n"
+     "}\n";
+
+  m_program = new QOpenGLShaderProgram;
+  m_program->addShaderFromSourceCode(QOpenGLShader::Vertex, vs);
+  m_program->addShaderFromSourceCode(QOpenGLShader::Fragment, fs);
+  m_program->link();
+
+  m_vertexbuffer = new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
+
+  GLfloat verts[4][5] = {
+    { -1.0, -1.0, -1.0, 0.0, 0.0 },
+    { -1.0, +1.0, -1.0, 0.0, 1.0 },
+    { +1.0, -1.0, -1.0, 1.0, 0.0 },
+    { +1.0, +1.0, -1.0, 1.0, 1.0 },
+  };
+
+  m_vertexbuffer->create();
+  m_vertexbuffer->setUsagePattern(QOpenGLBuffer::StaticDraw);
+  m_vertexbuffer->bind();
+  m_vertexbuffer->allocate(verts, sizeof(verts));
+  m_vertexbuffer->release();
+
+  m_vertexarrayobject = new QOpenGLVertexArrayObject;
+  m_vertexarrayobject->bind();
+  m_program->bind();
+
+  m_vertexbuffer->bind();
+  m_program->enableAttributeArray("vertex_pos");
+  m_program->setAttributeBuffer("vertex_pos", GL_FLOAT, 0, 3, 5 * sizeof(GLfloat));
+  m_program->enableAttributeArray("vertex_uv");
+  m_program->setAttributeBuffer("vertex_uv", GL_FLOAT, 3 * sizeof(GLfloat), 2, 5 * sizeof(GLfloat));
+  m_vertexbuffer->release();
+
+  m_texture = new QOpenGLTexture(QOpenGLTexture::Target2D);
+
+  m_texture->setSize(m_buffer->width(), m_buffer->height());
+
+  m_texture->setData(*m_buffer);
+
+  resizeGL(width(), height());
 }
 
 
@@ -259,7 +330,23 @@ void HandmadeWindow::paintGL()
 
   glf->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  m_game->render();
+  m_game->render((uint32_t*)m_buffer->bits());
+
+  m_texture->setData(QOpenGLTexture::BGRA, QOpenGLTexture::UInt8, m_buffer->bits());
+
+  QMatrix4x4 world;
+  world.ortho(-1.0f, +1.0f, +1.0f, -1.0f, 4.0f, 15.0f);
+  world.translate(0.0f, 0.0f, -10.0f);
+
+  m_program->bind();
+  m_program->setUniformValue("texture", 0);
+  m_program->setUniformValue("world", world);
+
+  m_vertexarrayobject->bind();
+
+  m_texture->bind();
+
+  glf->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
   update();
 }
@@ -339,7 +426,7 @@ int main(int argc, char **argv)
 
       if (QFileInfo(libhandmade).lastModified() != lastmodified)
       {
-        while ((lastmodified = QFileInfo(libhandmade).lastModified()).addSecs(1) > QDateTime::currentDateTime())
+        while ((lastmodified = QFileInfo(libhandmade).lastModified()).addSecs(2) > QDateTime::currentDateTime())
           ;
 
         game.reinit();

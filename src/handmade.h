@@ -21,5 +21,9 @@ struct GameState
 {
   GameState(HandmadePlatform::PlatformInterface &platform);
 
+  float testvalue = 0;
+
+  std::mt19937 entropy;
+
   AssetManager assets;
 };

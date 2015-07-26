@@ -145,18 +145,6 @@ namespace HandmadePlatform
   }
 
 
-  ///////////////////////// PlatformCore::open_handle ///////////////////////
-  void PlatformCore::open_handle(PlatformInterface::handle_t handle)
-  {
-    auto file = static_cast<platform_handle_t*>(handle);
-
-    file->fio.open(file->path, ios::binary);
-
-    if (!file->fio)
-      throw runtime_error("File Open Error on " + file->path);
-  }
-
-
   ///////////////////////// PlatformCore::read_handle ///////////////////////
   void PlatformCore::read_handle(PlatformInterface::handle_t handle, uint64_t position, void *buffer, size_t n)
   {
@@ -169,7 +157,7 @@ namespace HandmadePlatform
     file->fio.read((char*)buffer, n);
 
     if (!file->fio)
-      throw runtime_error("File Read Error on " + file->path);
+      throw runtime_error("Data Read Error");
   }
 
 
@@ -205,7 +193,7 @@ namespace HandmadePlatform
       {
         handle = new platform_handle_t;
 
-        handle->path = directory->iterator->string();
+        handle->fio.open(directory->iterator->string(), ios::in | ios::binary);
       }
 
       ++directory->iterator;

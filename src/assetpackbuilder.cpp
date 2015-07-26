@@ -46,7 +46,7 @@ void write_image_asset(ofstream &fout, AssetType type, const char *path, std::ve
 
   QImage image(path);
 
-  image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+  image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
 
   PackAssetHeader aset = { static_cast<uint32_t>(type) };
 
@@ -75,17 +75,17 @@ void write_test1()
 
   write_header(fout);
 
-  write_image_asset(fout, AssetType::HeroHead, "../../data/test/test_hero_front_head.bmp", { { AssetTagId::Orientation, 0*PI/2 } });
+  write_image_asset(fout, AssetType::HeroHead, "../../data/test/test_hero_front_head.bmp", { { AssetTagId::Orientation, 0*PI/2 }, { AssetTagId::Orientation, 2*PI } });
   write_image_asset(fout, AssetType::HeroHead, "../../data/test/test_hero_right_head.bmp", { { AssetTagId::Orientation, 1*PI/2 } });
   write_image_asset(fout, AssetType::HeroHead, "../../data/test/test_hero_back_head.bmp", { { AssetTagId::Orientation, 2*PI/2 } });
   write_image_asset(fout, AssetType::HeroHead, "../../data/test/test_hero_left_head.bmp", { { AssetTagId::Orientation, 3*PI/2 } });
 
-  write_image_asset(fout, AssetType::HeroTorso, "../../data/test/test_hero_front_torso.bmp", { { AssetTagId::Orientation, 0*PI/2 } });
+  write_image_asset(fout, AssetType::HeroTorso, "../../data/test/test_hero_front_torso.bmp", { { AssetTagId::Orientation, 0*PI/2 }, { AssetTagId::Orientation, 2*PI } });
   write_image_asset(fout, AssetType::HeroTorso, "../../data/test/test_hero_right_torso.bmp", { { AssetTagId::Orientation, 1*PI/2 } });
   write_image_asset(fout, AssetType::HeroTorso, "../../data/test/test_hero_back_torso.bmp", { { AssetTagId::Orientation, 2*PI/2 } });
   write_image_asset(fout, AssetType::HeroTorso, "../../data/test/test_hero_left_torso.bmp", { { AssetTagId::Orientation, 3*PI/2 } });
 
-  write_image_asset(fout, AssetType::HeroCape, "../../data/test/test_hero_front_cape.bmp", { { AssetTagId::Orientation, 0*PI/2 } });
+  write_image_asset(fout, AssetType::HeroCape, "../../data/test/test_hero_front_cape.bmp", { { AssetTagId::Orientation, 0*PI/2 }, { AssetTagId::Orientation, 2*PI } });
   write_image_asset(fout, AssetType::HeroCape, "../../data/test/test_hero_right_cape.bmp", { { AssetTagId::Orientation, 1*PI/2 } });
   write_image_asset(fout, AssetType::HeroCape, "../../data/test/test_hero_back_cape.bmp", { { AssetTagId::Orientation, 2*PI/2 } });
   write_image_asset(fout, AssetType::HeroCape, "../../data/test/test_hero_left_cape.bmp", { { AssetTagId::Orientation, 3*PI/2 } });

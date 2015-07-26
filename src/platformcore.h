@@ -117,12 +117,8 @@ namespace HandmadePlatform
       {
         std::mutex lock;
 
-        std::string path;
-
-        std::ifstream fio;
+        std::fstream fio;
       };
-
-      void open_handle(handle_t handle) override;
 
       void read_handle(handle_t handle, uint64_t position, void *buffer, std::size_t n) override;
 

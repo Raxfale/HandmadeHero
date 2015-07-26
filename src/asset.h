@@ -14,6 +14,7 @@
 #include <atomic>
 #include <vector>
 #include <unordered_map>
+#include <random>
 
 enum class AssetType
 {
@@ -88,17 +89,31 @@ class AssetManager
 {
   public:
 
+    typedef std::mt19937 random_type;
+
     typedef StackAllocator<> allocator_type;
 
     AssetManager(allocator_type const &allocator);
+
+    AssetManager(AssetManager const &) = delete;
 
   public:
 
     void initialise(std::vector<Asset, StackAllocator<Asset>> const &assets);
 
+    template<std::size_t N = 0>
+    Asset const *find(random_type &random, AssetType type, std::array<AssetTag, N> const &tags = {}, std::array<float, N> const &weights = []() { std::array<float, N> one; std::fill_n(one.data(), N, 1.0f); return one; }())
+    {
+      return find(random, type, tags.data(), weights.data(), N);
+    }
+
+    void *request(HandmadePlatform::PlatformInterface &platform, Asset const *asset);
+
   protected:
 
-    void fetch(HandmadePlatform::PlatformInterface &platform, Asset *asset);
+    Asset const *find(random_type &random, AssetType type, AssetTag const *tags, float const *weights, std::size_t n);
+
+    void fetch(HandmadePlatform::PlatformInterface &platform, Asset const *asset);
 
     static void background_loader(HandmadePlatform::PlatformInterface &platform, void *ldata, void *rdata);
 

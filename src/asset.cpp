@@ -10,9 +10,35 @@
 #include "asset.h"
 #include "assetpack.h"
 #include <algorithm>
+#include <cassert>
 #include <iostream>
 
 using namespace std;
+
+
+///////////////////////// asset_match_factor ////////////////////////////////
+static float asset_match_factor(Asset const &asset, AssetTag const *tags, float const *weights, size_t n)
+{
+  float result = 0.0;
+
+  for(size_t i = 0; i < n; ++i)
+  {
+    float factor = 0.0;
+
+    for(auto &tag: asset.tags)
+    {
+      if (tag.id == tags[i].id)
+      {
+        factor = max(factor, 1/(abs(tag.value - tags[i].value) + 1e-6f));
+      }
+    }
+
+    result += weights[i] * factor;
+  }
+
+  return result;
+}
+
 
 
 //|---------------------- Asset ---------------------------------------------
@@ -53,13 +79,76 @@ void AssetManager::initialise(std::vector<Asset, StackAllocator<Asset>> const &a
 
   size_t slot = 0;
   for(auto &asset : m_assets)
-  {
-    m_slots[slot].state = Slot::State::Empty;
+  {    
+    asset.second.slot = slot;
 
-    asset.second.slot = slot++;
+    m_slots[slot++].state = Slot::State::Empty;
   }
 
   cout << "Initialised " << m_assets.size() << " assets" << endl;
+}
+
+
+///////////////////////// AssetManager::find ////////////////////////////////
+Asset const *AssetManager::find(random_type &random, AssetType type, AssetTag const *tags, float const *weights, std::size_t n)
+{
+  Asset const *result = nullptr;
+
+  auto range = m_assets.equal_range(type);
+
+  int bestcount = 0;
+  float bestfactor = -1.0;
+
+  for(auto it = range.first; it != range.second; ++it)
+  {
+    auto &asset = it->second;
+
+    auto matchfactor = asset_match_factor(asset, tags, weights, n);
+
+    if (matchfactor == bestfactor)
+      ++bestcount;
+
+    if (matchfactor > bestfactor)
+    {
+      bestcount = 1;
+      bestfactor = matchfactor;
+
+      result = &asset;
+    }
+  }
+
+  if (bestcount > 1)
+  {
+    auto selected = uniform_int_distribution<int>(1, bestcount)(random);
+
+    for(auto it = range.first; selected != 0; --selected, ++it)
+    {
+      while(asset_match_factor(it->second, tags, weights, n) != bestfactor)
+        ++it;
+
+      result = &it->second;
+    }
+  }
+
+  return result;
+}
+
+
+///////////////////////// AssetManager::request /////////////////////////////
+void *AssetManager::request(HandmadePlatform::v1::PlatformInterface &platform, Asset const *asset)
+{
+  Slot &slot = m_slots[asset->slot];
+
+  if (slot.state.load(std::memory_order_relaxed) == Slot::State::Loaded)
+  {
+    std::atomic_thread_fence(std::memory_order_acquire);
+
+    return slot.data;
+  }
+
+  fetch(platform, asset);
+
+  return nullptr;
 }
 
 
@@ -85,7 +174,7 @@ void AssetManager::background_loader(HandmadePlatform::PlatformInterface &platfo
 
 
 ///////////////////////// AssetManager::fetch ///////////////////////////////
-void AssetManager::fetch(HandmadePlatform::PlatformInterface &platform, Asset *asset)
+void AssetManager::fetch(HandmadePlatform::PlatformInterface &platform, Asset const *asset)
 {
   Slot::State expected = Slot::State::Empty;
 
@@ -93,7 +182,7 @@ void AssetManager::fetch(HandmadePlatform::PlatformInterface &platform, Asset *a
   {
     m_slots[asset->slot].data = allocate<char>(m_allocator, asset->datasize);
 
-    platform.submit_work(background_loader, this, asset);
+    platform.submit_work(background_loader, this, const_cast<Asset*>(asset));
   }
 }
 
@@ -109,8 +198,6 @@ void initialise_asset_system(HandmadePlatform::PlatformInterface &platform, Asse
   {
     try
     {
-      platform.open_handle(handle);
-
       PackHeader header;
 
       platform.read_handle(handle, 0, &header, sizeof(header));
