@@ -13,6 +13,7 @@
 #include <iostream>
 
 using namespace std;
+using namespace lml;
 using namespace HandmadePlatform;
 
 
@@ -54,7 +55,7 @@ extern "C" void game_update(PlatformInterface &platform, GameInput const &input,
 
 
 ///////////////////////// game_render ///////////////////////////////////////
-extern "C" void game_render(PlatformInterface &platform, uint32_t *bits)
+extern "C" void game_render(PlatformInterface &platform)
 {
   GameState &state = *static_cast<GameState*>(platform.gamememory.data);
 
@@ -69,13 +70,6 @@ extern "C" void game_render(PlatformInterface &platform, uint32_t *bits)
 
     if (data)
     {
-      for(int y = 0; y < asset->height; ++y)
-      {
-        for(int x = 0; x < asset->width; ++x)
-        {
-          bits[(y+50)*960+(x+50)] = *(static_cast<uint32_t*>(data) + y*asset->width + x);
-        }
-      }
     }
   }
 }

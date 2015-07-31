@@ -31,12 +31,38 @@ namespace HandmadePlatform
     //|---------------------- GameInput -----------------------------------------
     //|--------------------------------------------------------------------------
 
+    struct GameButton
+    {
+      bool state;
+      int transitions;
+    };
+
+    struct GameController
+    {
+      GameButton move_up;
+      GameButton move_down;
+      GameButton move_left;
+      GameButton move_right;
+
+      GameButton action_up;
+      GameButton action_down;
+      GameButton action_left;
+      GameButton action_right;
+
+      GameButton left_shoulder;
+      GameButton right_shoulder;
+
+      GameButton back;
+      GameButton start;
+    };
+
     struct GameInput
     {
       int mousex, mousey, mousez;
-  //      game_button_state MouseButtons[5];
 
-  //      game_controller_input Controllers[5];
+      GameButton mousebuttons[5];
+
+      GameController controllers[5];
     };
 
 
@@ -75,6 +101,11 @@ namespace HandmadePlatform
       virtual void submit_work(void (*func)(PlatformInterface &, void*, void*), void *ldata, void *rdata) = 0;
 
 
+      // opengl
+
+      virtual void *gl_request_proc(const char *proc) = 0;
+
+
       // misc
 
       virtual void terminate() = 0;
@@ -88,5 +119,5 @@ namespace HandmadePlatform
 typedef void (*game_init_t)(HandmadePlatform::PlatformInterface &platform);
 typedef void (*game_reinit_t)(HandmadePlatform::PlatformInterface &platform);
 typedef void (*game_update_t)(HandmadePlatform::PlatformInterface &platform, HandmadePlatform::GameInput const &input, float dt);
-typedef void (*game_render_t)(HandmadePlatform::PlatformInterface &platform, uint32_t *bits);
+typedef void (*game_render_t)(HandmadePlatform::PlatformInterface &platform);
 

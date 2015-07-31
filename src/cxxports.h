@@ -7,8 +7,11 @@
 //   following Casey Muratori's Handmade Hero (handmadehero.org)
 //
 
+#include <utility>
 #include <string>
 #include <dirent.h>
+
+#pragma once
 
 namespace std
 {
@@ -156,4 +159,102 @@ namespace std
   }
 #endif
 
+#if 1
+  // placeholder for fold expressions
+  struct fold_impl
+  {
+    template<typename Func, typename T>
+    static constexpr auto foldl(T const &first)
+    {
+      return first;
+    }
+
+    template<typename Func, typename T>
+    static constexpr auto foldl(T &&first, T &&second)
+    {
+      return Func()(std::forward<T>(first), std::forward<T>(second));
+    }
+
+    template<typename Func, typename T, typename... Args>
+    static constexpr auto foldl(T &&first, T &&second, Args&&... args)
+    {
+      return foldl<Func>(Func()(first, second), std::forward<Args>(args)...);
+    }
+  };
+
+  template<typename Func, typename... Args>
+  auto foldl(Args&&... args)
+  {
+    return fold_impl::foldl<Func>(std::forward<Args>(args)...);
+  }
+#endif
+
+#if 0
+  template<size_t... Indices> struct index_sequence
+  {
+    typedef size_t value_type;
+
+    static constexpr size_t size() noexcept { return sizeof...(Indices); }
+  };
+#endif
+}
+
+namespace lml
+{
+#if 1
+  // make_index_sequence
+  // these are a little different than those proposed for std
+  template<size_t i, size_t j, size_t stride, typename = void>
+  struct make_index_sequence_impl
+  {
+    template<typename>
+    struct detail;
+
+    template<size_t... Indices>
+    struct detail<std::index_sequence<Indices...>>
+    {
+      using type = std::index_sequence<i, Indices...>;
+    };
+
+    using type = typename detail<typename make_index_sequence_impl<i+stride, j, stride>::type>::type;
+  };
+
+  template<size_t i, size_t j, size_t stride>
+  struct make_index_sequence_impl<i, j, stride, typename std::enable_if<!(i < j)>::type>
+  {
+    using type = std::index_sequence<>;
+  };
+
+  template<size_t i, size_t j, size_t stride = 1>
+  using make_index_sequence = typename make_index_sequence_impl<i, j, stride>::type;
+
+  // get
+  template<size_t i, typename IndexSequence>
+  struct get_index_sequence_impl
+  {
+    template<size_t, typename>
+    struct detail;
+
+    template<size_t head, size_t... rest>
+    struct detail<0, std::index_sequence<head, rest...>>
+    {
+      static constexpr size_t value = head;
+    };
+
+    template<size_t n, size_t head, size_t... rest>
+    struct detail<n, std::index_sequence<head, rest...>>
+    {
+      static constexpr size_t value = detail<n-1, std::index_sequence<rest...>>::value;
+    };
+
+    using type = detail<i, IndexSequence>;
+  };
+
+
+  template<size_t i, size_t... Indices>
+  size_t get(std::index_sequence<Indices...>)
+  {
+    return get_index_sequence_impl<i, std::index_sequence<Indices...>>::type::value;
+  }
+#endif
 }

@@ -56,23 +56,22 @@ class Asset
 
     AssetType type;
 
-    std::vector<AssetTag, StackAllocator<AssetTag>> tags;
+    std::vector<AssetTag, allocator_type> tags;
 
     HandmadePlatform::PlatformInterface::handle_t filehandle;
 
-    uint64_t fileposition;
-
+    uint64_t datapos;
     std::size_t datasize;
 
     union
     {
-      struct
+      struct // image info
       {
         int width;
         int height;
       };
 
-      struct
+      struct // audio info
       {
         int channels;
       };
@@ -99,19 +98,22 @@ class AssetManager
 
   public:
 
+    // initialise asset metadata
     void initialise(std::vector<Asset, StackAllocator<Asset>> const &assets);
 
+    // Find an asset by metadata
     template<std::size_t N = 0>
-    Asset const *find(random_type &random, AssetType type, std::array<AssetTag, N> const &tags = {}, std::array<float, N> const &weights = []() { std::array<float, N> one; std::fill_n(one.data(), N, 1.0f); return one; }())
+    Asset const *find(random_type &random, AssetType type, std::array<AssetTag, N> const &tags = {}, std::array<float, N> const &weights = []() { std::array<float, N> one; std::fill_n(one.data(), N, 1.0f); return one; }()) const
     {
       return find(random, type, tags.data(), weights.data(), N);
     }
 
-    void *request(HandmadePlatform::PlatformInterface &platform, Asset const *asset);
+    // Request asset payload. May not be loaded, will initiate background load and return null.
+    void const *request(HandmadePlatform::PlatformInterface &platform, Asset const *asset);
 
   protected:
 
-    Asset const *find(random_type &random, AssetType type, AssetTag const *tags, float const *weights, std::size_t n);
+    Asset const *find(random_type &random, AssetType type, AssetTag const *tags, float const *weights, std::size_t n) const;
 
     void fetch(HandmadePlatform::PlatformInterface &platform, Asset const *asset);
 

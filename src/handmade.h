@@ -11,6 +11,7 @@
 
 #include "platform.h"
 #include "memory.h"
+#include "lml.h"
 #include "asset.h"
 
 

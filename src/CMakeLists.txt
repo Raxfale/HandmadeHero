@@ -14,7 +14,9 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 set(GAME_SRCS ${GAME_SRCS} platform.h)
 set(GAME_SRCS ${GAME_SRCS} memory.h)
+set(GAME_SRCS ${GAME_SRCS} lml.h vector.h bound.h)
 set(GAME_SRCS ${GAME_SRCS} asset.h asset.cpp)
+#set(GAME_SRCS ${GAME_SRCS} renderer.h renderer.cpp)
 set(GAME_SRCS ${GAME_SRCS} handmade.h handmade.cpp)
 
 add_library(handmade SHARED ${GAME_SRCS})

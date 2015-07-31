@@ -34,7 +34,9 @@ namespace HandmadePlatform
       {
         KeyDown,
         KeyUp,
-        MouseMove,
+        MouseMoveX,
+        MouseMoveY,
+        MouseMoveZ,
         MousePress,
         MouseRelease,
       };
@@ -49,14 +51,18 @@ namespace HandmadePlatform
     public:
       InputBuffer();
 
-//      void register_keydown();
-//      void register_keyup();
+      void register_mousemove(int x, int y);
+
+      void register_keydown(int key);
+      void register_keyup(int key);
 
     public:
 
       GameInput grab();
 
     private:
+
+      GameInput m_input;
 
       std::vector<InputEvent> m_events;
 
@@ -106,6 +112,8 @@ namespace HandmadePlatform
   class PlatformCore : public PlatformInterface
   {
     public:
+
+      PlatformCore();
 
       void initialise(size_t gamememorysize);
 

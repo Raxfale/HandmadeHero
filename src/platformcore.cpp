@@ -12,12 +12,37 @@
 
 using namespace std;
 
+namespace
+{
+  ///////////////////////// map_key_to_button ///////////////////////////////
+  HandmadePlatform::GameButton *map_key_to_button(HandmadePlatform::GameController &input, int key)
+  {
+    switch (key)
+    {
+      case 0x01000012:
+        return &input.move_left;
+
+      case 0x01000013:
+        return &input.move_up;
+
+      case 0x01000014:
+        return &input.move_right;
+
+      case 0x01000015:
+        return &input.move_down;
+
+      default:
+        return nullptr;
+    }
+  }
+}
+
 
 namespace HandmadePlatform
 {
 
-  //|---------------------- GameMemory ----------------------------------------
-  //|--------------------------------------------------------------------------
+  //|---------------------- GameMemory --------------------------------------
+  //|------------------------------------------------------------------------
 
   ///////////////////////// GameMemory::initialise ////////////////////////////
   void gamememory_initialise(GameMemory &pool, void *data, size_t capacity)
@@ -31,33 +56,95 @@ namespace HandmadePlatform
 
 
 
-  //|---------------------- Input Buffer --------------------------------------
-  //|--------------------------------------------------------------------------
+  //|---------------------- Input Buffer ------------------------------------
+  //|------------------------------------------------------------------------
 
-  ///////////////////////// InputBuffer::Constructor //////////////////////////
+  ///////////////////////// InputBuffer::Constructor ////////////////////////
   InputBuffer::InputBuffer()
   {
+    m_input = {};
   }
 
 
-  ///////////////////////// InputBuffer::grab /////////////////////////////////
+  ///////////////////////// InputBuffer::register_mousemove /////////////////
+  void InputBuffer::register_mousemove(int x, int y)
+  {
+    lock_guard<mutex> lock(m_mutex);
+
+    m_events.push_back({ EventType::MouseMoveX, x });
+    m_events.push_back({ EventType::MouseMoveY, y });
+  }
+
+
+  ///////////////////////// InputBuffer::register_keydown ///////////////////
+  void InputBuffer::register_keydown(int key)
+  {
+    lock_guard<mutex> lock(m_mutex);
+
+    m_events.push_back({ EventType::KeyDown, key });
+  }
+
+
+  ///////////////////////// InputBuffer::register_keyup /////////////////////
+  void InputBuffer::register_keyup(int key)
+  {
+    lock_guard<mutex> lock(m_mutex);
+
+    m_events.push_back({ EventType::KeyUp, key });
+  }
+
+
+  ///////////////////////// InputBuffer::grab ///////////////////////////////
   GameInput InputBuffer::grab()
   {
     lock_guard<mutex> lock(m_mutex);
 
-    GameInput input;
+    // Keyboard
+    m_input.controllers[0].move_up.transitions = 0;
+    m_input.controllers[0].move_down.transitions = 0;
+    m_input.controllers[0].move_left.transitions = 0;
+    m_input.controllers[0].move_right.transitions = 0;
 
     for(auto &evt : m_events)
     {
       switch(evt.type)
       {
         case EventType::KeyDown:
-          break;
+          {
+            auto button = map_key_to_button(m_input.controllers[0], evt.data);
+
+            if (button)
+            {
+              button->state = true;
+              button->transitions += 1;
+            }
+
+            break;
+          }
 
         case EventType::KeyUp:
+          {
+            auto button = map_key_to_button(m_input.controllers[0], evt.data);
+
+            if (button)
+            {
+              button->state = false;
+              button->transitions += 1;
+            }
+
+            break;
+          }
+
+        case EventType::MouseMoveX:
+          m_input.mousex = evt.data;
           break;
 
-        case EventType::MouseMove:
+        case EventType::MouseMoveY:
+          m_input.mousey = evt.data;
+          break;
+
+        case EventType::MouseMoveZ:
+          m_input.mousez = evt.data;
           break;
 
         case EventType::MousePress:
@@ -70,15 +157,15 @@ namespace HandmadePlatform
 
     m_events.clear();
 
-    return input;
+    return m_input;
   }
 
 
 
-  //|---------------------- WorkQueue -----------------------------------------
-  //|--------------------------------------------------------------------------
+  //|---------------------- WorkQueue ---------------------------------------
+  //|------------------------------------------------------------------------
 
-  ///////////////////////// WorkQueue::Constructor ////////////////////////////
+  ///////////////////////// WorkQueue::Constructor //////////////////////////
   WorkQueue::WorkQueue(int threads)
   {
     m_done = false;
@@ -112,7 +199,7 @@ namespace HandmadePlatform
   }
 
 
-  ///////////////////////// WorkQueue::Destructor /////////////////////////////
+  ///////////////////////// WorkQueue::Destructor ///////////////////////////
   WorkQueue::~WorkQueue()
   {
     for(size_t i = 0; i < m_threads.size(); ++i)
@@ -124,24 +211,29 @@ namespace HandmadePlatform
 
 
 
-  //|---------------------- PlatformCore --------------------------------------
-  //|--------------------------------------------------------------------------
+  //|---------------------- PlatformCore ------------------------------------
+  //|------------------------------------------------------------------------
 
 
-  ///////////////////////// PlatformCore::initialise //////////////////////////
-  void PlatformCore::initialise(std::size_t gamememorysize)
+  ///////////////////////// PlatformCore::Constructor ///////////////////////
+  PlatformCore::PlatformCore()
   {
     m_terminaterequested = false;
+  }
 
-    m_gamememory.resize(gamememorysize);
-    m_gamescratchmemory.resize(256*1024*1024);
-    m_renderscratchmemory.resize(256*1024*1024);
 
-    gamememory_initialise(gamememory, m_gamememory.data(), m_gamememory.size());
+  ///////////////////////// PlatformCore::initialise ////////////////////////
+  void PlatformCore::initialise(std::size_t gamememorysize)
+  {
+    m_gamememory.reserve(gamememorysize);
+    m_gamescratchmemory.reserve(256*1024*1024);
+    m_renderscratchmemory.reserve(256*1024*1024);
 
-    gamememory_initialise(gamescratchmemory, m_gamescratchmemory.data(), m_gamescratchmemory.size());
+    gamememory_initialise(gamememory, m_gamememory.data(), m_gamememory.capacity());
 
-    gamememory_initialise(renderscratchmemory, m_renderscratchmemory.data(), m_renderscratchmemory.size());
+    gamememory_initialise(gamescratchmemory, m_gamescratchmemory.data(), m_gamescratchmemory.capacity());
+
+    gamememory_initialise(renderscratchmemory, m_renderscratchmemory.data(), m_renderscratchmemory.capacity());
   }
 
 
@@ -217,7 +309,7 @@ namespace HandmadePlatform
   }
 
 
-  ///////////////////////// PlatformCore::terminate ///////////////////////////
+  ///////////////////////// PlatformCore::terminate /////////////////////////
   void PlatformCore::terminate()
   {
     m_terminaterequested = true;

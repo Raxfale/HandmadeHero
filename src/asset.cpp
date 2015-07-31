@@ -15,30 +15,33 @@
 
 using namespace std;
 
-
-///////////////////////// asset_match_factor ////////////////////////////////
-static float asset_match_factor(Asset const &asset, AssetTag const *tags, float const *weights, size_t n)
+namespace
 {
-  float result = 0.0;
 
-  for(size_t i = 0; i < n; ++i)
+  ///////////////////////// asset_match_factor ////////////////////////////////
+  float asset_match_factor(Asset const &asset, AssetTag const *tags, float const *weights, size_t n)
   {
-    float factor = 0.0;
+    float result = 0.0;
 
-    for(auto &tag: asset.tags)
+    for(size_t i = 0; i < n; ++i)
     {
-      if (tag.id == tags[i].id)
+      float factor = 0.0;
+
+      for(auto &tag: asset.tags)
       {
-        factor = max(factor, 1/(abs(tag.value - tags[i].value) + 1e-6f));
+        if (tag.id == tags[i].id)
+        {
+          factor = max(factor, 1/(abs(tag.value - tags[i].value) + 1e-6f));
+        }
       }
+
+      result += weights[i] * factor;
     }
 
-    result += weights[i] * factor;
+    return result;
   }
 
-  return result;
 }
-
 
 
 //|---------------------- Asset ---------------------------------------------
@@ -90,7 +93,7 @@ void AssetManager::initialise(std::vector<Asset, StackAllocator<Asset>> const &a
 
 
 ///////////////////////// AssetManager::find ////////////////////////////////
-Asset const *AssetManager::find(random_type &random, AssetType type, AssetTag const *tags, float const *weights, std::size_t n)
+Asset const *AssetManager::find(random_type &random, AssetType type, AssetTag const *tags, float const *weights, std::size_t n) const
 {
   Asset const *result = nullptr;
 
@@ -123,6 +126,7 @@ Asset const *AssetManager::find(random_type &random, AssetType type, AssetTag co
 
     for(auto it = range.first; selected != 0; --selected, ++it)
     {
+      // TODO: I'm a little worried about the termination condition of this loop, have another look
       while(asset_match_factor(it->second, tags, weights, n) != bestfactor)
         ++it;
 
@@ -135,7 +139,7 @@ Asset const *AssetManager::find(random_type &random, AssetType type, AssetTag co
 
 
 ///////////////////////// AssetManager::request /////////////////////////////
-void *AssetManager::request(HandmadePlatform::v1::PlatformInterface &platform, Asset const *asset)
+void const *AssetManager::request(HandmadePlatform::v1::PlatformInterface &platform, Asset const *asset)
 {
   Slot &slot = m_slots[asset->slot];
 
@@ -160,7 +164,7 @@ void AssetManager::background_loader(HandmadePlatform::PlatformInterface &platfo
 
   try
   {
-    platform.read_handle(asset.filehandle, asset.fileposition + sizeof(PackChunk), slot.data, asset.datasize);
+    platform.read_handle(asset.filehandle, asset.datapos + sizeof(PackChunk), slot.data, asset.datasize);
   }
   catch(exception &e)
   {
@@ -217,15 +221,18 @@ void initialise_asset_system(HandmadePlatform::PlatformInterface &platform, Asse
 
         platform.read_handle(handle, position, &chunk, sizeof(chunk));
 
+        if (chunk.type == 0x444e4548) // HEND
+          break;
+
         switch (chunk.type)
         {
           case 0x54455341: // ASET
             {
-              PackAssetHeader assetheader;
+              PackAssetHeader aset;
 
-              platform.read_handle(handle, position + sizeof(chunk), &assetheader, sizeof(assetheader));
+              platform.read_handle(handle, position + sizeof(chunk), &aset, sizeof(aset));
 
-              asset.type = static_cast<AssetType>(assetheader.type);
+              asset.type = static_cast<AssetType>(aset.type);
 
               asset.tags = {};
 
@@ -234,31 +241,25 @@ void initialise_asset_system(HandmadePlatform::PlatformInterface &platform, Asse
 
           case 0x47415441: // ATAG
             {
-              PackAssetTag assettag;
+              PackAssetTag atag;
 
-              platform.read_handle(handle, position + sizeof(chunk), &assettag, sizeof(assettag));
+              platform.read_handle(handle, position + sizeof(chunk), &atag, sizeof(atag));
 
-              asset.tags.push_back({ static_cast<AssetTagId>(assettag.id), assettag.value });
+              asset.tags.push_back({ static_cast<AssetTagId>(atag.id), atag.value });
 
               break;
             }
 
           case 0x52444849: // IHDR
             {
-              PackImageHeader imageheader;
+              PackImageHeader ihdr;
 
-              platform.read_handle(handle, position + sizeof(chunk), &imageheader, sizeof(imageheader));
+              platform.read_handle(handle, position + sizeof(chunk), &ihdr, sizeof(ihdr));
 
-              asset.width = imageheader.width;
-              asset.height = imageheader.height;
-              asset.datasize = imageheader.width * imageheader.height * sizeof(uint32_t);
-
-              break;
-            }
-
-          case 0x54414449: // IDAT
-            {
-              asset.fileposition = position;
+              asset.width = ihdr.width;
+              asset.height = ihdr.height;
+              asset.datapos = ihdr.dataoffset;
+              asset.datasize = ihdr.width * ihdr.height * sizeof(uint32_t);
 
               break;
             }
@@ -270,9 +271,6 @@ void initialise_asset_system(HandmadePlatform::PlatformInterface &platform, Asse
               break;
             }
         }
-
-        if (chunk.type == 0x444e4548) // HEND
-          break;
 
         position += chunk.length + sizeof(chunk) + sizeof(uint32_t);
       }

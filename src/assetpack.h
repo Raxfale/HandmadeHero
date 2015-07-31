@@ -39,11 +39,13 @@ struct PackImageHeader
 {
   uint32_t width;
   uint32_t height;
+  uint64_t dataoffset;
 };
 
 struct PackSoundHeader
 {
   uint32_t channels;
+  uint64_t dataoffset;
 };
 
 #pragma pack(pop)

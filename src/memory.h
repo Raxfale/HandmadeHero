@@ -28,8 +28,10 @@ class StackAllocator
     template<typename U>
     struct rebind
     {
-      typedef StackAllocator<U> other;
+      typedef StackAllocator<U, std::max(alignment, alignof(U))> other;
     };
+
+    static_assert(!(alignment & (alignment - 1)), "alignment must be power-of-two");
 
   public:
 
@@ -126,7 +128,7 @@ class StackAllocatorWithFreelist : public StackAllocator<T, alignment>
     template<typename U>
     struct rebind
     {
-      typedef StackAllocatorWithFreelist<U> other;
+      typedef StackAllocatorWithFreelist<U, std::max(alignment, alignof(U))> other;
     };
 
   public:
@@ -227,7 +229,7 @@ void StackAllocatorWithFreelist<T, alignment>::deallocate(T * const ptr, std::si
 template<typename T>
 bool inarena(HandmadePlatform::GameMemory &arena, T *ptr)
 {
-  return ptr >= arena.data && ptr < (void*)((char*)arena.data + arena.size);
+  return arena.data <= ptr && ptr < (void*)((char*)arena.data + arena.size);
 }
 
 

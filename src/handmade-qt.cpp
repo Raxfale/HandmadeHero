@@ -12,15 +12,12 @@
 #include <QGuiApplication>
 #include <QOpenGLWindow>
 #include <QOpenGLFunctions>
-#include <QOpenGLTexture>
-#include <QOpenGLShaderProgram>
-#include <QOpenGLBuffer>
-#include <QOpenGLVertexArrayObject>
 #include <QLibrary>
 #include <QElapsedTimer>
 #include <QKeyEvent>
 #include <QFileInfo>
 #include <QDateTime>
+#include <QThread>
 #include <iostream>
 #include <chrono>
 
@@ -35,7 +32,6 @@ using namespace HandmadePlatform;
 #endif
 
 
-
 //|---------------------- Platform ------------------------------------------
 //|--------------------------------------------------------------------------
 
@@ -43,8 +39,19 @@ class Platform : public PlatformCore
 {
   public:
 
+    // opengl
+
+    void *gl_request_proc(const char *proc) override;
 
 };
+
+
+
+///////////////////////// Platform::gl_request_proc /////////////////////////
+void *Platform::gl_request_proc(const char *proc)
+{
+  return (void*)QOpenGLContext::currentContext()->getProcAddress(proc);
+}
 
 
 
@@ -63,7 +70,7 @@ class Game
 
     void update(float dt);
 
-    void render(uint32_t *bits);
+    void render();
 
     void terminate();
 
@@ -73,7 +80,7 @@ class Game
 
     InputBuffer &inputbuffer() { return m_inputbuffer; }
 
-    PlatformInterface &platform() { return m_platform; }
+    Platform &platform() { return m_platform; }
 
   private:
 
@@ -89,13 +96,19 @@ class Game
     Platform m_platform;
 
     QLibrary m_game;
+
+    int m_fpscount;
+    QTime m_fpstimer;
 };
 
 
 ///////////////////////// Game::Contructor //////////////////////////////////
 Game::Game()
 {
-  m_running = true;
+  m_running = false;
+
+  m_fpscount = 0;
+  m_fpstimer.start();
 }
 
 
@@ -126,6 +139,8 @@ void Game::init()
   m_platform.initialise(1*1024*1024*1024);
 
   game_init(m_platform);
+
+  m_running = true;
 }
 
 
@@ -170,11 +185,22 @@ void Game::update(float dt)
 
 
 ///////////////////////// Game::render //////////////////////////////////////
-void Game::render(uint32_t *bits)
+void Game::render()
 {
   m_platform.renderscratchmemory.size = 0;
 
-  game_render(m_platform, bits);
+  game_render(m_platform);
+
+  ++m_fpscount;
+
+  if (m_fpstimer.elapsed() > 1000)
+  {
+    cout << m_fpscount * 1000.0 / m_fpstimer.elapsed() << "fps" << endl;
+
+    m_fpscount = 0;
+    m_fpstimer.restart();
+  }
+
 }
 
 
@@ -189,7 +215,7 @@ void Game::terminate()
 //|---------------------- Handmade Window -----------------------------------
 //|--------------------------------------------------------------------------
 
-class HandmadeWindow : public QOpenGLWindow
+class HandmadeWindow : public QWindow
 {
   public:
     HandmadeWindow(Game *game);
@@ -198,22 +224,9 @@ class HandmadeWindow : public QOpenGLWindow
 
     bool event(QEvent *event);
 
-    void initializeGL();
-
-    void resizeGL(int width, int height);
-
-    void paintGL();
-
   private:
 
     Game *m_game;
-
-    QImage *m_buffer;
-
-    QOpenGLTexture *m_texture;
-    QOpenGLShaderProgram *m_program;
-    QOpenGLBuffer *m_vertexbuffer;
-    QOpenGLVertexArrayObject *m_vertexarrayobject;
 };
 
 
@@ -221,17 +234,11 @@ class HandmadeWindow : public QOpenGLWindow
 HandmadeWindow::HandmadeWindow(Game *game)
   : m_game(game)
 {
-  QSurfaceFormat format;
+  setSurfaceType(QWindow::OpenGLSurface);
 
-//  format.setSamples(4);
-//  format.setDepthBufferSize(24);
-//  format.setStencilBufferSize(8);
+  resize(960, 540);
 
-  setFormat(format);
-
-  m_buffer = new QImage(960, 540, QImage::Format_ARGB32);
-
-  resize(m_buffer->width(), m_buffer->height());
+  create();
 
   show();
 }
@@ -242,114 +249,48 @@ bool HandmadeWindow::event(QEvent *event)
 {
 //  qDebug() << event->type();
 
-  if (event->type() == QEvent::KeyRelease)
+  switch (event->type())
   {
-    cout << static_cast<QKeyEvent*>(event)->key() << endl;
+    case QEvent::MouseMove:
+      {
+        auto mouseevent = static_cast<QMouseEvent*>(event);
+
+        m_game->inputbuffer().register_mousemove(mouseevent->pos().x(), mouseevent->pos().y());
+
+        break;
+      }
+
+    case QEvent::KeyPress:
+      {
+        auto keyevent = static_cast<QKeyEvent*>(event);
+
+        if (!keyevent->isAutoRepeat())
+          m_game->inputbuffer().register_keydown(keyevent->key());
+
+        break;
+      }
+
+    case QEvent::KeyRelease:
+      {
+        auto keyevent = static_cast<QKeyEvent*>(event);
+
+        if (!keyevent->isAutoRepeat())
+          m_game->inputbuffer().register_keyup(keyevent->key());
+
+        break;
+      }
+
+    default:
+      break;
   }
 
   if (event->type() == QEvent::Close)
     m_game->terminate();
 
-  return QOpenGLWindow::event(event);
+  return QWindow::event(event);
 }
 
 
-///////////////////////// HandmadeWindow::initializeGL //////////////////////
-void HandmadeWindow::initializeGL()
-{
-  const char *vs =
-     "attribute highp vec4 vertex_pos;\n"
-     "attribute mediump vec4 vertex_uv;\n"
-     "varying mediump vec4 uv;\n"
-     "uniform mediump mat4 world;\n"
-     "void main(void)\n"
-     "{\n"
-     "  uv = vertex_uv;\n"
-     "  gl_Position = world * vertex_pos;\n"
-     "}\n";
-
-  const char *fs =
-     "uniform sampler2D texture;\n"
-     "varying mediump vec4 uv;\n"
-     "void main(void)\n"
-     "{\n"
-     "  gl_FragColor = texture2D(texture, uv.st);\n"
-     "}\n";
-
-  m_program = new QOpenGLShaderProgram;
-  m_program->addShaderFromSourceCode(QOpenGLShader::Vertex, vs);
-  m_program->addShaderFromSourceCode(QOpenGLShader::Fragment, fs);
-  m_program->link();
-
-  m_vertexbuffer = new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
-
-  GLfloat verts[4][5] = {
-    { -1.0, -1.0, -1.0, 0.0, 0.0 },
-    { -1.0, +1.0, -1.0, 0.0, 1.0 },
-    { +1.0, -1.0, -1.0, 1.0, 0.0 },
-    { +1.0, +1.0, -1.0, 1.0, 1.0 },
-  };
-
-  m_vertexbuffer->create();
-  m_vertexbuffer->setUsagePattern(QOpenGLBuffer::StaticDraw);
-  m_vertexbuffer->bind();
-  m_vertexbuffer->allocate(verts, sizeof(verts));
-  m_vertexbuffer->release();
-
-  m_vertexarrayobject = new QOpenGLVertexArrayObject;
-  m_vertexarrayobject->bind();
-  m_program->bind();
-
-  m_vertexbuffer->bind();
-  m_program->enableAttributeArray("vertex_pos");
-  m_program->setAttributeBuffer("vertex_pos", GL_FLOAT, 0, 3, 5 * sizeof(GLfloat));
-  m_program->enableAttributeArray("vertex_uv");
-  m_program->setAttributeBuffer("vertex_uv", GL_FLOAT, 3 * sizeof(GLfloat), 2, 5 * sizeof(GLfloat));
-  m_vertexbuffer->release();
-
-  m_texture = new QOpenGLTexture(QOpenGLTexture::Target2D);
-
-  m_texture->setSize(m_buffer->width(), m_buffer->height());
-
-  m_texture->setData(*m_buffer);
-
-  resizeGL(width(), height());
-}
-
-
-///////////////////////// HandmadeWindow::resizeGL //////////////////////////
-void HandmadeWindow::resizeGL(int width, int height)
-{
-}
-
-
-///////////////////////// HandmadeWindow::paintGL ///////////////////////////
-void HandmadeWindow::paintGL()
-{
-  QOpenGLFunctions *glf = context()->functions();
-
-  glf->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-  m_game->render((uint32_t*)m_buffer->bits());
-
-  m_texture->setData(QOpenGLTexture::BGRA, QOpenGLTexture::UInt8, m_buffer->bits());
-
-  QMatrix4x4 world;
-  world.ortho(-1.0f, +1.0f, +1.0f, -1.0f, 4.0f, 15.0f);
-  world.translate(0.0f, 0.0f, -10.0f);
-
-  m_program->bind();
-  m_program->setUniformValue("texture", 0);
-  m_program->setUniformValue("world", world);
-
-  m_vertexarrayobject->bind();
-
-  m_texture->bind();
-
-  glf->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-  update();
-}
 
 
 //|---------------------- main ----------------------------------------------
@@ -363,18 +304,39 @@ int main(int argc, char **argv)
   app.setOrganizationDomain("");
   app.setApplicationName("handmadehero");
 
+  QSurfaceFormat format;
+
+//  format.setSamples(4);
+//  format.setDepthBufferSize(24);
+//  format.setStencilBufferSize(8);
+
+  QSurfaceFormat::setDefaultFormat(format);
+
+  QOpenGLContext context;
+
+  context.create();
+
   try
   {
     Game game;
 
-    game.init();
-
     HandmadeWindow window(&game);
+
+    context.makeCurrent(&window);
+
+    try
+    {
+      game.init();
+    }
+    catch(std::exception &e)
+    {
+      cerr << "Init Error: " << e.what() << endl;
+    }
 
 #if 0
     thread updatethread([&]() {
 
-      int hz = 30;
+      int hz = 60;
 
       qint64 dt = chrono::nanoseconds(1s).count() / hz;
 
@@ -396,6 +358,10 @@ int main(int argc, char **argv)
     while (game.running())
     {
       app.processEvents();
+
+      game.render();
+
+      context.swapBuffers(&window);
     }
 
     updatethread.join();
@@ -416,6 +382,10 @@ int main(int argc, char **argv)
 
       game.update(1.0f/hz);
 
+      game.render();
+
+      context.swapBuffers(&window);
+
       while (tick.nsecsElapsed() < dt)
         ;
 
@@ -435,6 +405,8 @@ int main(int argc, char **argv)
     }
 
 #endif
+
+    return window.isVisible() ? app.exec() : 0;
   }
   catch(std::exception &e)
   {
