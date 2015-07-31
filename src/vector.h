@@ -32,7 +32,7 @@ namespace lml
 
       Vector operator()() const { return { (*this)[Indices]... }; }
 
-      VectorView &operator =(Vector const &v) { size_t i = 0; (void)(int[]){ (void((*this)[Indices] = v[i]),++i)... }; return *this; }
+      VectorView &operator =(Vector const &v) { std::tie((*this)[Indices]...) = lml::tie(&v[0], make_index_sequence<0, size()>()); return *this; }
 
       template<typename V>
       VectorView &operator +=(V &&v) { *this = *this + std::forward<V>(v); return *this; }

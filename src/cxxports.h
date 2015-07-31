@@ -9,6 +9,7 @@
 
 #include <utility>
 #include <string>
+#include <tuple>
 #include <dirent.h>
 
 #pragma once
@@ -256,5 +257,12 @@ namespace lml
   {
     return get_index_sequence_impl<i, std::index_sequence<Indices...>>::type::value;
   }
+
+  template<typename T, size_t... Indices>
+  constexpr auto tie(T *data, std::index_sequence<Indices...>)
+  {
+    return std::tie(data[Indices]...);
+  }
+
 #endif
 }

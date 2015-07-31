@@ -26,7 +26,7 @@ namespace lml
 
       Bound operator()() const { return { { (*this)[0][Indices]... }, { (*this)[1][Indices]... } }; }
 
-      BoundView &operator =(Bound const &b) { size_t i = 0; (void)(int[]){ (void((*this)[0][Indices] = b[0][i]),((*this)[1][Indices] = b[1][i]),++i)... }; return *this; }
+      BoundView &operator =(Bound const &b) { std::tie((*this)[0][Indices]...) = lml::tie(b[0], make_index_sequence<0, size()>()); std::tie((*this)[1][Indices]...) = lml::tie(b[1], make_index_sequence<0, size()>()); return *this; }
 
       constexpr T const *operator[](size_t j) const { return ((T*)this + j*Stride); }
       T *operator[](size_t j) { return ((T*)this + j*Stride); }
