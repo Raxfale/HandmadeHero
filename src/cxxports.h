@@ -35,6 +35,9 @@ namespace std
     auto pn = reinterpret_cast<std::size_t>(ptr);
     auto aligned = (pn + alignment - 1) & -alignment;
 
+    if (space < size + alignment)
+      return nullptr;
+
     space = space - (aligned - pn);
 
     return ptr = reinterpret_cast<void *>(aligned);

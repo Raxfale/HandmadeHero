@@ -80,6 +80,35 @@ namespace lml
   }
 
 
+  //|-------------------- Color4 --------------------------------------------
+  //|------------------------------------------------------------------------
+
+  class Color4 : public VectorView<Color4, float, 0, 1, 2, 3>
+  {
+    public:
+      Color4() = default;
+      constexpr Color4(float r, float g, float b, float a = 1.0);
+
+    union
+    {
+      struct
+      {
+        float r;
+        float g;
+        float b;
+        float a;
+      };
+    };
+  };
+
+
+  //|///////////////////// Color4::Constructor //////////////////////////////
+  constexpr Color4::Color4(float r, float g, float b, float a)
+    : r(r), g(g), b(b), a(a)
+  {
+  }
+
+
 
   //|-------------------- Rect2 ---------------------------------------------
   //|------------------------------------------------------------------------

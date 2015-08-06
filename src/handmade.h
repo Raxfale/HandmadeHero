@@ -20,7 +20,7 @@
 
 struct GameState
 {
-  GameState(HandmadePlatform::PlatformInterface &platform);
+  GameState(StackAllocator<> const &allocator);
 
   float testvalue = 0;
 

@@ -9,6 +9,7 @@
 
 #include "platformcore.h"
 #include <memory>
+#include <cstddef>
 
 using namespace std;
 
@@ -51,7 +52,7 @@ namespace HandmadePlatform
     pool.data = data;
     pool.capacity = capacity;
 
-    std::align(16, 0, pool.data, pool.capacity);
+    std::align(alignof(max_align_t), 0, pool.data, pool.capacity);
   }
 
 

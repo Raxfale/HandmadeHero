@@ -324,14 +324,7 @@ int main(int argc, char **argv)
 
     context.makeCurrent(&window);
 
-    try
-    {
-      game.init();
-    }
-    catch(std::exception &e)
-    {
-      cerr << "Init Error: " << e.what() << endl;
-    }
+    game.init();
 
 #if 0
     thread updatethread([&]() {

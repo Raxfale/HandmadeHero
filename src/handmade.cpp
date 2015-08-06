@@ -8,7 +8,7 @@
 //
 
 #include "handmade.h"
-#include "asset.h"
+#include "renderer.h"
 #include <cassert>
 #include <iostream>
 
@@ -18,19 +18,20 @@ using namespace HandmadePlatform;
 
 
 ///////////////////////// GameState::Constructor ////////////////////////////
-GameState::GameState(PlatformInterface &platform)
-  : assets(platform.gamememory)
+GameState::GameState(StackAllocator<> const &allocator)
+  : assets(allocator)
 {
-  assert(this == platform.gamememory.data);
 }
 
 
 ///////////////////////// game_init /////////////////////////////////////////
 extern "C" void game_init(PlatformInterface &platform)
-{ 
+{  
   cout << "Init" << endl;
 
-  GameState &state = *new(allocate<GameState>(platform.gamememory)) GameState(platform);
+  GameState &state = *new(allocate<GameState>(platform.gamememory)) GameState(platform.gamememory);
+
+  assert(&state == platform.gamememory.data);
 
   state.entropy.seed(random_device()());
 
@@ -41,9 +42,9 @@ extern "C" void game_init(PlatformInterface &platform)
 ///////////////////////// game_reinit ///////////////////////////////////////
 extern "C" void game_reinit(PlatformInterface &platform)
 {
-//  GameState &state = *static_cast<GameState*>(platform.gamememory.data);
-
   cout << "ReInit" << endl;
+
+//  GameState &state = *static_cast<GameState*>(platform.gamememory.data);
 }
 
 
@@ -51,6 +52,7 @@ extern "C" void game_reinit(PlatformInterface &platform)
 extern "C" void game_update(PlatformInterface &platform, GameInput const &input, float dt)
 {
 //  GameState &state = *static_cast<GameState*>(platform.gamememory.data);
+
 }
 
 
@@ -58,6 +60,12 @@ extern "C" void game_update(PlatformInterface &platform, GameInput const &input,
 extern "C" void game_render(PlatformInterface &platform)
 {
   GameState &state = *static_cast<GameState*>(platform.gamememory.data);
+
+  PushBuffer pushbuffer(platform.renderscratchmemory, 1*1024*1024);
+
+  *pushbuffer.push<Renderable::Camera>() = { 22, 12 };
+
+  *pushbuffer.push<Renderable::Clear>() = { Color4(1.0, 0.3, 0.5) };
 
   state.testvalue = fmod(state.testvalue + 0.1, 2*3.14159265f);
 
@@ -70,6 +78,9 @@ extern "C" void game_render(PlatformInterface &platform)
 
     if (data)
     {
+      *pushbuffer.push<Renderable::Bitmap>() = { asset->width, asset->height, data };
     }
   }
+
+  render(platform, pushbuffer);
 }

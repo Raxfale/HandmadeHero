@@ -13,6 +13,7 @@
 #include "cxxports.h"
 #include <memory>
 #include <scoped_allocator>
+#include <cassert>
 
 
 //|---------------------- StackAllocator ------------------------------------
@@ -25,10 +26,10 @@ class StackAllocator
 
     typedef T value_type;
 
-    template<typename U>
+    template<typename U, std::size_t ulignment = alignof(U)>
     struct rebind
     {
-      typedef StackAllocator<U, std::max(alignment, alignof(U))> other;
+      typedef StackAllocator<U, std::max(alignment, ulignment)> other;
     };
 
     static_assert(!(alignment & (alignment - 1)), "alignment must be power-of-two");
@@ -77,15 +78,14 @@ T *StackAllocator<T, alignment>::allocate(std::size_t n)
 {
   std::size_t size = n * sizeof(T);
 
-  if (m_arena->capacity < m_arena->size + alignment + size)
-    throw std::bad_alloc();
-
   void *result = static_cast<char*>(m_arena->data) + m_arena->size;
 
-  std::align(alignment, size, result, m_arena->capacity);
+  std::size_t space = m_arena->capacity - m_arena->size;
+
+  if (!std::align(alignment, size, result, space))
+    throw std::bad_alloc();
 
   m_arena->size = static_cast<char*>(result) + size - static_cast<char*>(m_arena->data);
-  m_arena->capacity -= size;
 
   return static_cast<T*>(result);
 }
@@ -118,7 +118,7 @@ bool operator !=(StackAllocator<T, alignment> const &lhs, StackAllocator<U, ulig
 //|---------------------- StackAllocatorWithFreelist ------------------------
 //|--------------------------------------------------------------------------
 
-template<typename T, std::size_t alignment = alignof(T)>
+template<typename T = void*, std::size_t alignment = alignof(T)>
 class StackAllocatorWithFreelist : public StackAllocator<T, alignment>
 {
   public:
@@ -194,6 +194,8 @@ T *StackAllocatorWithFreelist<T, alignment>::allocate(std::size_t n)
 
     if (n <= node->n)
     {
+      assert((aligned<T, alignment>(entry) == entry));
+
       *into = node->next;
 
       return entry;
@@ -212,6 +214,8 @@ template<typename T, std::size_t alignment>
 void StackAllocatorWithFreelist<T, alignment>::deallocate(T * const ptr, std::size_t n)
 {
   Node *node = aligned<Node>(ptr);
+
+  assert((size_t)node + sizeof(Node) < (size_t)ptr + n*sizeof(T));
 
   node->n = n;
   node->next = m_freelist;
@@ -234,10 +238,10 @@ bool inarena(HandmadePlatform::GameMemory &arena, T *ptr)
 
 
 ///////////////////////// allocate //////////////////////////////////////////
-template<typename T>
-T *allocate(StackAllocator<T> allocator, std::size_t n = 1)
+template<typename T, std::size_t alignment = alignof(T)>
+T *allocate(StackAllocator<> allocator, std::size_t n = 1)
 {
-  return allocator.allocate(n);
+  return typename StackAllocator<>::template rebind<T, alignment>::other(allocator).allocate(n);
 }
 
 
