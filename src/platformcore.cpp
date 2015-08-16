@@ -304,7 +304,7 @@ namespace HandmadePlatform
 
 
   ///////////////////////// PlatformCore::submit_work ///////////////////////
-  void PlatformCore::submit_work(void (*func)(PlatformInterface &, void *, void*), void *ldata, void *rdata)
+  void PlatformCore::submit_work(void (*func)(PlatformInterface &, void*, void*), void *ldata, void *rdata)
   {
     m_workqueue.push([=]() { func(*this, ldata, rdata); });
   }

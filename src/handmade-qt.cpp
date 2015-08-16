@@ -149,8 +149,10 @@ void Game::reinit()
 {
   m_game.unload();
 
+#ifdef _WIN32
   QFile::remove("handmade-temp.dll");
   QFile::copy("handmade.dll", "handmade-temp.dll");
+#endif
 
   game_init = (game_init_t)m_game.resolve("game_init");
   game_reinit = (game_reinit_t)m_game.resolve("game_reinit");

@@ -31,6 +31,8 @@ typedef void (APIENTRYP PFNGLBLENDFUNCPROC) (GLenum sfactor,GLenum dfactor);
 
 typedef void (APIENTRYP PFNGLENABLEPROC) (GLenum cap);
 
+typedef void (APIENTRYP PFNGLCULLFACEPROC) (GLenum mode);
+
 using namespace std;
 using namespace lml;
 using namespace HandmadePlatform;
@@ -331,10 +333,10 @@ void render(HandmadePlatform::PlatformInterface &platform, PushBuffer const &ren
   glUniform1i(diffuseuniform, 0);
 
   GLfloat verts[4][5] = {
-    { -0.5, -0.5, 0.0, 0.0, 1.0 },
     { -0.5, +0.5, 0.0, 0.0, 0.0 },
-    { +0.5, -0.5, 0.0, 1.0, 1.0 },
+    { -0.5, -0.5, 0.0, 0.0, 1.0 },
     { +0.5, +0.5, 0.0, 1.0, 0.0 },
+    { +0.5, -0.5, 0.0, 1.0, 1.0 },
   };
 
   auto glGenVertexArrays = (PFNGLGENVERTEXARRAYSPROC)platform.gl_request_proc("glGenVertexArrays");
@@ -371,6 +373,13 @@ void render(HandmadePlatform::PlatformInterface &platform, PushBuffer const &ren
   glEnableVertexAttribArray(1);
 
   auto glEnable = (PFNGLENABLEPROC)platform.gl_request_proc("glEnable");
+
+  auto glCullFace = (PFNGLCULLFACEPROC)platform.gl_request_proc("glCullFace");
+
+  glCullFace(GL_BACK);
+
+  glEnable(GL_CULL_FACE);
+
   auto glBlendFunc = (PFNGLBLENDFUNCPROC)platform.gl_request_proc("glBlendFunc");
 
   glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);

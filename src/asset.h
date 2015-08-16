@@ -15,6 +15,7 @@
 #include <vector>
 #include <unordered_map>
 #include <random>
+#include <mutex>
 
 enum class AssetType
 {
@@ -76,8 +77,6 @@ class Asset
         int channels;
       };
     };
-
-    size_t slot;
 };
 
 
@@ -99,7 +98,7 @@ class AssetManager
   public:
 
     // initialise asset metadata
-    void initialise(std::vector<Asset, StackAllocator<Asset>> const &assets);
+    void initialise(std::vector<Asset, StackAllocator<Asset>> const &assets, std::size_t slabsize);
 
     // Find an asset by metadata
     template<std::size_t N = 0>
@@ -111,35 +110,70 @@ class AssetManager
     // Request asset payload. May not be loaded, will initiate background load and return null.
     void const *request(HandmadePlatform::PlatformInterface &platform, Asset const *asset);
 
+  public:
+
+    uintptr_t aquire_barrier();
+
+    void release_barrier(uintptr_t barrier);
+
   protected:
 
     Asset const *find(random_type &random, AssetType type, AssetTag const *tags, float const *weights, std::size_t n) const;
-
-    void fetch(HandmadePlatform::PlatformInterface &platform, Asset const *asset);
-
-    static void background_loader(HandmadePlatform::PlatformInterface &platform, void *ldata, void *rdata);
 
   private:
 
     allocator_type m_allocator;
 
-    std::unordered_multimap<AssetType, Asset, std::hash<AssetType>, std::equal_to<>, std::scoped_allocator_adaptor<allocator_type>> m_assets;
+  private:
+
+    struct Slot;
+
+    struct AssetEx : public Asset
+    {
+      AssetEx(Asset const &asset, allocator_type const &allocator);
+
+      Slot *slot;
+    };
+
+    std::unordered_multimap<AssetType, AssetEx, std::hash<AssetType>, std::equal_to<>, std::scoped_allocator_adaptor<allocator_type>> m_assets;
+
+  private:
 
     struct Slot
     {
       enum class State
       {
         Empty,
+        Barrier,
         Loading,
         Loaded
       };
 
-      std::atomic<State> state;
+      State state;
 
-      void *data;
+      AssetEx *asset;
+
+      std::size_t size;
+
+      Slot *after;
+
+      Slot *prev;
+      Slot *next;
+
+      char data[];
     };
 
-    Slot *m_slots;
+    Slot *m_head;
+
+    Slot *aquire_slot(std::size_t size);
+
+    Slot *touch_slot(Slot *slot);
+
+    static void background_loader(HandmadePlatform::PlatformInterface &platform, void *ldata, void *rdata);
+
+  private:
+
+    mutable std::mutex m_mutex;
 };
 
 // Initialise

@@ -60,32 +60,41 @@ Asset::Asset(Asset const &other, allocator_type const &allocator)
 }
 
 
+///////////////////////// AssetEx::Constructor //////////////////////////////
+AssetManager::AssetEx::AssetEx(Asset const &asset, allocator_type const &allocator)
+  : Asset(asset, allocator)
+{
+  slot = nullptr;
+}
+
+
+
 //|---------------------- AssetManager --------------------------------------
 //|--------------------------------------------------------------------------
 
 ///////////////////////// AssetManager::Constructor /////////////////////////
 AssetManager::AssetManager(allocator_type const &allocator)
   : m_allocator(allocator),
-    m_assets(allocator),
-    m_slots(nullptr)
+    m_assets(allocator)
 {
+  m_head = nullptr;
 }
 
 
 ///////////////////////// AssetManager::initialise //////////////////////////
-void AssetManager::initialise(std::vector<Asset, StackAllocator<Asset>> const &assets)
+void AssetManager::initialise(std::vector<Asset, StackAllocator<Asset>> const &assets, std::size_t slabsize)
 {
+  m_head = new(allocate<char, alignof(Slot)>(m_allocator, slabsize)) Slot;
+
+  m_head->size = slabsize;
+  m_head->after = nullptr;
+  m_head->prev = m_head;
+  m_head->next = m_head;
+  m_head->state = Slot::State::Empty;
+
   for(auto &asset : assets)
-    m_assets.insert({ asset.type, asset });
-
-  m_slots = new(allocate<Slot>(m_allocator, m_assets.size())) Slot[m_assets.size()];
-
-  size_t slot = 0;
-  for(auto &asset : m_assets)
-  {    
-    asset.second.slot = slot;
-
-    m_slots[slot++].state = Slot::State::Empty;
+  {
+    m_assets.emplace(asset.type, asset);
   }
 
   cout << "Initialised " << m_assets.size() << " assets" << endl;
@@ -138,55 +147,174 @@ Asset const *AssetManager::find(random_type &random, AssetType type, AssetTag co
 }
 
 
-///////////////////////// AssetManager::request /////////////////////////////
-void const *AssetManager::request(HandmadePlatform::v1::PlatformInterface &platform, Asset const *asset)
+///////////////////////// AssetManager::aquire_slot /////////////////////////
+AssetManager::Slot *AssetManager::aquire_slot(size_t size)
 {
-  Slot &slot = m_slots[asset->slot];
+  auto bytes = ((size + sizeof(Slot) - 1) / alignof(Slot) + 1) * alignof(Slot);
 
-  if (slot.state.load(std::memory_order_relaxed) == Slot::State::Loaded)
+  for(auto slot = m_head; true; slot = slot->next)
   {
-    std::atomic_thread_fence(std::memory_order_acquire);
+    if (slot->state == Slot::State::Barrier)
+      return nullptr;
 
-    return slot.data;
+    if (slot->state == Slot::State::Loaded)
+    {
+      slot->asset->slot = nullptr;
+
+      slot->state = Slot::State::Empty;
+    }
+
+    if (slot->state == Slot::State::Empty)
+    {
+      if (slot->after && slot->after->state == Slot::State::Empty)
+      {
+        // merge
+
+        slot->after->prev->next = slot->after->next;
+        slot->after->next->prev = slot->after->prev;
+
+        slot->size += slot->after->size;
+        slot->after = slot->after->after;
+
+        m_head = slot;
+      }
+
+      if (slot->size > bytes + sizeof(Slot))
+      {
+        // split
+
+        Slot *newslot = reinterpret_cast<Slot*>(reinterpret_cast<char*>(slot) + bytes);
+
+        newslot->size = slot->size - bytes;
+        newslot->after = slot->after;
+        newslot->prev = m_head->prev;
+        newslot->next = m_head;
+        newslot->state = Slot::State::Empty;
+
+        newslot->prev->next = newslot;
+        newslot->next->prev = newslot;
+
+        slot->size = bytes;
+        slot->after = newslot;
+
+        m_head = newslot;
+      }
+
+      if (slot->size >= bytes)
+      {
+        touch_slot(slot);
+
+        return slot;
+      }
+    }
+
+    if (slot->next == m_head)
+      return nullptr;
+  }
+}
+
+
+///////////////////////// AssetManager::touch_slot //////////////////////////
+AssetManager::Slot *AssetManager::touch_slot(AssetManager::Slot *slot)
+{
+  if (slot == m_head)
+    m_head = m_head->next;
+
+  slot->prev->next = slot->next;
+  slot->next->prev = slot->prev;
+
+  slot->next = m_head;
+  slot->prev = m_head->prev;
+
+  slot->prev->next = slot;
+  slot->next->prev = slot;
+
+  return slot;
+}
+
+
+///////////////////////// AssetManager::request /////////////////////////////
+void const *AssetManager::request(HandmadePlatform::PlatformInterface &platform, Asset const *asset)
+{
+  lock_guard<mutex> lock(m_mutex);
+
+  auto &slot = static_cast<AssetEx*>(const_cast<Asset*>(asset))->slot;
+
+  if (!slot)
+  {
+    slot = aquire_slot(asset->datasize);
+
+    if (slot)
+    {
+      slot->state = Slot::State::Loading;
+
+      slot->asset = static_cast<AssetEx*>(const_cast<Asset*>(asset));
+
+      platform.submit_work(background_loader, this, slot);
+    }
+
+    return nullptr;
   }
 
-  fetch(platform, asset);
+  touch_slot(slot);
 
-  return nullptr;
+  if (slot->state != Slot::State::Loaded)
+    return nullptr;
+
+  return slot->data;
+}
+
+
+///////////////////////// AssetManager::aquire_barrier //////////////////////
+uintptr_t AssetManager::aquire_barrier()
+{
+  lock_guard<mutex> lock(m_mutex);
+
+  auto slot = aquire_slot(0);
+
+  if (slot)
+  {
+    slot->state = Slot::State::Barrier;
+  }
+
+  return reinterpret_cast<uintptr_t>(slot);
+}
+
+
+///////////////////////// AssetManager::release_barrier /////////////////////
+void AssetManager::release_barrier(uintptr_t barrier)
+{
+  lock_guard<mutex> lock(m_mutex);
+
+  auto slot = reinterpret_cast<Slot*>(barrier);
+
+  if (slot)
+  {
+    slot->state = Slot::State::Empty;
+  }
 }
 
 
 ///////////////////////// AssetManager::background_loader ///////////////////
 void AssetManager::background_loader(HandmadePlatform::PlatformInterface &platform, void *ldata, void *rdata)
 {
-  Asset &asset = *static_cast<Asset*>(rdata);
-  Slot &slot = static_cast<AssetManager*>(ldata)->m_slots[asset.slot];
+  auto &manager = *static_cast<AssetManager*>(ldata);
+
+  auto &slot = *static_cast<Slot*>(rdata);
 
   try
   {
-    platform.read_handle(asset.filehandle, asset.datapos + sizeof(PackChunk), slot.data, asset.datasize);
+    platform.read_handle(slot.asset->filehandle, slot.asset->datapos + sizeof(PackChunk), slot.data, slot.asset->datasize);
   }
   catch(exception &e)
   {
     cerr << "Background Read Error: " << e.what() << endl;
   }
 
-  slot.state = Slot::State::Loaded;
-
-  cout << "Asset " << asset.slot << " loaded" << endl;
-}
-
-
-///////////////////////// AssetManager::fetch ///////////////////////////////
-void AssetManager::fetch(HandmadePlatform::PlatformInterface &platform, Asset const *asset)
-{
-  Slot::State expected = Slot::State::Empty;
-
-  if (atomic_compare_exchange_strong(&m_slots[asset->slot].state, &expected, Slot::State::Loading))
   {
-    m_slots[asset->slot].data = allocate<char>(m_allocator, asset->datasize);
+    lock_guard<mutex> lock(manager.m_mutex);
 
-    platform.submit_work(background_loader, this, const_cast<Asset*>(asset));
+    slot.state = Slot::State::Loaded;
   }
 }
 
@@ -283,6 +411,6 @@ void initialise_asset_system(HandmadePlatform::PlatformInterface &platform, Asse
 
   platform.close_type_enumerator(hhas);
 
-  assetmanager.initialise(assets);
+  assetmanager.initialise(assets, 512*1024*1024);
 }
 

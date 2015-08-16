@@ -61,6 +61,8 @@ extern "C" void game_render(PlatformInterface &platform)
 {
   GameState &state = *static_cast<GameState*>(platform.gamememory.data);
 
+  auto barrier = state.assets.aquire_barrier();
+
   PushBuffer pushbuffer(platform.renderscratchmemory, 1*1024*1024);
 
   *pushbuffer.push<Renderable::Camera>() = { 22, 12 };
@@ -83,4 +85,6 @@ extern "C" void game_render(PlatformInterface &platform)
   }
 
   render(platform, pushbuffer);
+
+  state.assets.release_barrier(barrier);
 }
