@@ -8,7 +8,7 @@
 //
 
 #include "handmade.h"
-#include "renderer.h"
+#include "rendergroup.h"
 #include <cassert>
 #include <iostream>
 
@@ -61,30 +61,53 @@ extern "C" void game_render(PlatformInterface &platform)
 {
   GameState &state = *static_cast<GameState*>(platform.gamememory.data);
 
-  auto barrier = state.assets.aquire_barrier();
+  RenderGroup rendergroup(platform, &state.assets, platform.renderscratchmemory, 1*1024*1024);
 
-  PushBuffer pushbuffer(platform.renderscratchmemory, 1*1024*1024);
+  rendergroup.projection(-11.0f, -6.0f, 11.0f, 6.0f, 0.6f/8.0f);
 
-  *pushbuffer.push<Renderable::Camera>() = { 22, 12 };
+  rendergroup.clear({ 0.5f, 0.2f, 0.7f });
 
-  *pushbuffer.push<Renderable::Clear>() = { Color4(1.0, 0.3, 0.5) };
+  rendergroup.push_rect(Vec3(0.0f, 0.0f, 0.0f), Rect2({ 0.0f, 0.0f }, { 3.0f, 5.0f }), Color4(0.0f, 1.0f, 0.0f, 1.0f));
+  rendergroup.push_rect(Vec3(0.0f, 0.0f, 0.0f), Rect2({ -1.0f, -1.0f }, { 1.0f, 1.0f }), Color4(0.0f, 0.0f, 1.0f, 0.5f));
+
+  rendergroup.push_rect(Vec3(-6.0f, 3.0f, 0.0f), Rect2({ -0.5f, -1.0f }, { 0.5f, 1.0f }), Color4(0.5f, 0.8f, 0.0f, 0.9f));
+  rendergroup.push_rect(Vec3(-6.0f, -3.0f, 0.0f), Rect2({ -0.5f, -1.0f }, { 0.5f, 1.0f }), Color4(0.5f, 0.8f, 0.0f, 0.9f));
+  rendergroup.push_rect(Vec3(6.0f, 3.0f, 0.0f), Rect2({ -0.5f, -1.0f }, { 0.5f, 1.0f }), Color4(0.5f, 0.8f, 0.0f, 0.9f));
+  rendergroup.push_rect(Vec3(6.0f, -3.0f, 0.0f), Rect2({ -0.5f, -1.0f }, { 0.5f, 1.0f }), Color4(0.5f, 0.8f, 0.0f, 0.9f));
+
+  rendergroup.push_rect(Vec3(-6.0f, 3.0f, -3.0f), Rect2({ -0.5f, -1.0f }, { 0.5f, 1.0f }), Color4(0.5f, 0.8f, 0.0f, 0.6f));
+  rendergroup.push_rect(Vec3(-6.0f, -3.0f, -3.0f), Rect2({ -0.5f, -1.0f }, { 0.5f, 1.0f }), Color4(0.5f, 0.8f, 0.0f, 0.6f));
+  rendergroup.push_rect(Vec3(6.0f, 3.0f, -3.0f), Rect2({ -0.5f, -1.0f }, { 0.5f, 1.0f }), Color4(0.5f, 0.8f, 0.0f, 0.6f));
+  rendergroup.push_rect(Vec3(6.0f, -3.0f, -3.0f), Rect2({ -0.5f, -1.0f }, { 0.5f, 1.0f }), Color4(0.5f, 0.8f, 0.0f, 0.6f));
+
+  auto tree = state.assets.find(state.entropy, AssetType::Tree);
+
+  rendergroup.push_bitmap(Vec3(-6.0f, 3.0f, 0.0f), 2.0f, tree, Color4(0.5f, 0.8f, 0.0f, 0.9f));
+  rendergroup.push_bitmap(Vec3(-6.0f, -3.0f, 0.0f), 2.0f, tree, Color4(0.5f, 0.8f, 0.0f, 0.9f));
+  rendergroup.push_bitmap(Vec3(6.0f, 3.0f, 0.0f), 2.0f, tree, Color4(0.5f, 0.8f, 0.0f, 0.9f));
+  rendergroup.push_bitmap(Vec3(6.0f, -3.0f, 0.0f), 2.0f, tree, Color4(0.5f, 0.8f, 0.0f, 0.9f));
+
+  rendergroup.push_bitmap(Vec3(-6.0f, 3.0f, -3.0f), 2.0f, tree, Color4(0.5f, 0.8f, 0.0f, 0.9f));
+  rendergroup.push_bitmap(Vec3(-6.0f, -3.0f, -3.0f), 2.0f, tree, Color4(0.5f, 0.8f, 0.0f, 0.9f));
+  rendergroup.push_bitmap(Vec3(6.0f, 3.0f, -3.0f), 2.0f, tree, Color4(0.5f, 0.8f, 0.0f, 0.9f));
+  rendergroup.push_bitmap(Vec3(6.0f, -3.0f, -3.0f), 2.0f, tree, Color4(0.5f, 0.8f, 0.0f, 0.9f));
 
   state.testvalue = fmod(state.testvalue + 0.1, 2*3.14159265f);
 
-//  auto asset = state.assets.find(state.entropy, AssetType::Tree);
   auto asset = state.assets.find(state.entropy, AssetType::HeroHead, array<AssetTag, 1>({ AssetTagId::Orientation, state.testvalue }));
 
-  if (asset)
-  {
-    auto data = state.assets.request(platform, asset);
+  rendergroup.push_bitmap(Vec3(0.0f, -4.0f, 0.0f), 5.0f, asset);
 
-    if (data)
-    {
-      *pushbuffer.push<Renderable::Bitmap>() = { asset->width, asset->height, data };
-    }
-  }
+  render(platform, rendergroup);
 
-  render(platform, pushbuffer);
+  RenderGroup debuggroup(platform, &state.assets, platform.renderscratchmemory, 1*1024*1024);
 
-  state.assets.release_barrier(barrier);
+  debuggroup.projection(0, 0, 960, 540, 0);
+
+  auto font = state.assets.find(AssetType::Font);
+
+  debuggroup.push_text(Vec3(0, 0.0f, 0.0f), 64, font, "Hello World");
+  debuggroup.push_text(Vec3(0, font->ascent + font->descent + font->leading, 0.0f), 64, font, "WA To iyjgf");
+
+  render(platform, debuggroup);
 }

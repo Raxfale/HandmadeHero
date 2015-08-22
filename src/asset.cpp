@@ -102,6 +102,20 @@ void AssetManager::initialise(std::vector<Asset, StackAllocator<Asset>> const &a
 
 
 ///////////////////////// AssetManager::find ////////////////////////////////
+Asset const *AssetManager::find(AssetType type) const
+{
+  Asset const *result = nullptr;
+
+  auto it = m_assets.find(type);
+
+  if (it != m_assets.end())
+    result = &it->second;
+
+  return result;
+}
+
+
+///////////////////////// AssetManager::find ////////////////////////////////
 Asset const *AssetManager::find(random_type &random, AssetType type, AssetTag const *tags, float const *weights, std::size_t n) const
 {
   Asset const *result = nullptr;
@@ -150,7 +164,7 @@ Asset const *AssetManager::find(random_type &random, AssetType type, AssetTag co
 ///////////////////////// AssetManager::aquire_slot /////////////////////////
 AssetManager::Slot *AssetManager::aquire_slot(size_t size)
 {
-  auto bytes = ((size + sizeof(Slot) - 1) / alignof(Slot) + 1) * alignof(Slot);
+  auto bytes = ((size + sizeof(Slot) - 1)/alignof(Slot) + 1) * alignof(Slot);
 
   for(auto slot = m_head; true; slot = slot->next)
   {
@@ -159,6 +173,8 @@ AssetManager::Slot *AssetManager::aquire_slot(size_t size)
 
     if (slot->state == Slot::State::Loaded)
     {
+      // evict
+
       slot->asset->slot = nullptr;
 
       slot->state = Slot::State::Empty;
@@ -202,6 +218,8 @@ AssetManager::Slot *AssetManager::aquire_slot(size_t size)
 
       if (slot->size >= bytes)
       {
+        // match
+
         touch_slot(slot);
 
         return slot;
@@ -386,8 +404,26 @@ void initialise_asset_system(HandmadePlatform::PlatformInterface &platform, Asse
 
               asset.width = ihdr.width;
               asset.height = ihdr.height;
+              asset.aspect = (float)asset.width / (float)asset.height;
+              asset.alignx = ihdr.alignx;
+              asset.aligny = ihdr.aligny;
               asset.datapos = ihdr.dataoffset;
               asset.datasize = ihdr.width * ihdr.height * sizeof(uint32_t);
+
+              break;
+            }
+
+          case 0x52444846: // FHDR
+            {
+              PackFontHeader fhdr;
+
+              platform.read_handle(handle, position + sizeof(chunk), &fhdr, sizeof(fhdr));
+
+              asset.ascent = fhdr.ascent;
+              asset.descent = fhdr.descent;
+              asset.leading = fhdr.leading;
+              asset.datapos = fhdr.dataoffset;
+              asset.datasize = fhdr.datasize;
 
               break;
             }

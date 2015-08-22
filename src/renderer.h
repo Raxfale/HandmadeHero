@@ -17,6 +17,7 @@
 // Renderables
 namespace Renderable
 {
+  using Vec2 = lml::Vec2;
   using Vec3 = lml::Vec3;
   using Color4 = lml::Color4;
 
@@ -32,8 +33,10 @@ namespace Renderable
   {
     static const Type type = Type::Camera;
 
-    float width;
-    float height;
+    float left;
+    float bottom;
+    float right;
+    float top;
   };
 
   struct Clear
@@ -48,6 +51,10 @@ namespace Renderable
     static const Type type = Type::Rect;
 
     Color4 color;
+
+    Vec2 xaxis;
+    Vec2 yaxis;
+    Vec2 origin;
   };
 
   struct Bitmap
@@ -57,6 +64,12 @@ namespace Renderable
     int width;
     int height;
     void const *bits;
+
+    Color4 color;
+
+    Vec2 xaxis;
+    Vec2 yaxis;
+    Vec2 origin;
   };
 }
 

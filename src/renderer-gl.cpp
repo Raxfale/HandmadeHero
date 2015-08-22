@@ -40,6 +40,7 @@ using namespace HandmadePlatform;
 namespace
 {
   const char *vssrc = R"(
+    #version 130
 
     attribute highp vec4 vertex_pos;
     attribute highp vec4 vertex_uv;
@@ -57,6 +58,7 @@ namespace
   )";
 
   const char *fssrc = R"(
+    #version 130
 
     uniform sampler2D diffuse;
 
@@ -64,7 +66,7 @@ namespace
 
     void main()
     {
-      gl_FragColor = texture2D(diffuse, uv.st);
+      gl_FragColor = texture(diffuse, uv.st);
     }
 
   )";
@@ -97,7 +99,7 @@ namespace
     transform->data[3][2] = -(farz + nearz) / (farz - nearz);
   }
 
-  Transform bybasis(Transform const &transform, Vec2 const &xaxis, Vec2 const &yaxis, Vec2 const &origin)
+  Transform mulbybasis(Transform const &transform, Vec2 const &xaxis, Vec2 const &yaxis, Vec2 const &origin)
   {
     Transform result = transform;
 
@@ -116,22 +118,23 @@ namespace
     return result;
   }
 
-  void draw_clear(HandmadePlatform::PlatformInterface &platform, Transform const &projection, float r, float g, float b)
+
+  void draw_clear(HandmadePlatform::PlatformInterface &platform, Transform const &projection, Renderable::Clear const &clear)
   {
     auto glClearColor = (PFNGLCLEARCOLORPROC)platform.gl_request_proc("glClearColor");
     auto glClear = (PFNGLCLEARPROC)platform.gl_request_proc("glClear");
 
     assert(glClearColor && glClear);
 
-    glClearColor(r, g, b, 1.0);
+    glClearColor(clear.color.r, clear.color.g, clear.color.b, clear.color.a);
 
     glClear(GL_COLOR_BUFFER_BIT);
   }
 
 
-  void draw_rect(HandmadePlatform::PlatformInterface &platform, Transform const &projection, float r, float g, float b, float a)
+  void draw_rect(HandmadePlatform::PlatformInterface &platform, Transform const &projection, Renderable::Rect const &rect)
   {
-    auto transform = bybasis(projection, Vec2(0.25, 0.25), perp(Vec2(0.25, 0.25)), Vec2(-0.5, -0.5));
+    auto transform = mulbybasis(projection, rect.xaxis, rect.yaxis, rect.origin);
 
     auto glGenTextures = (PFNGLGENTEXTURESPROC)platform.gl_request_proc("glGenTextures");
     auto glActiveTexture = (PFNGLACTIVETEXTURE)platform.gl_request_proc("glActiveTexture");
@@ -148,9 +151,9 @@ namespace
 
     glBindTexture(GL_TEXTURE_2D, texture);
 
-    GLbyte texel[4] = { GLbyte(a*b*255), GLbyte(a*g*255), GLbyte(a*r*255), GLbyte(a*255) };
+    GLbyte texel[4] = { GLbyte(rect.color.a*rect.color.b*255), GLbyte(rect.color.a*rect.color.g*255), GLbyte(rect.color.a*rect.color.r*255), GLbyte(rect.color.a*255) };
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA, 1, 1, 0, GL_BGRA, GL_UNSIGNED_BYTE, &texel);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_BGRA, GL_UNSIGNED_BYTE, &texel);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -172,9 +175,9 @@ namespace
   }
 
 
-  void draw_bitmap(HandmadePlatform::PlatformInterface &platform, Transform const &projection, int width, int height, void const *bits)
+  void draw_bitmap(HandmadePlatform::PlatformInterface &platform, Transform const &projection, Renderable::Bitmap const &bitmap)
   {
-    auto transform = bybasis(projection, Vec2(144/15.0, 0), Vec2(0, 217/15.0), Vec2(0.0, 0.0));
+    auto transform = mulbybasis(projection, bitmap.xaxis, bitmap.yaxis, bitmap.origin);
 
     auto glGenTextures = (PFNGLGENTEXTURESPROC)platform.gl_request_proc("glGenTextures");
     auto glActiveTexture = (PFNGLACTIVETEXTURE)platform.gl_request_proc("glActiveTexture");
@@ -191,7 +194,7 @@ namespace
 
     glBindTexture(GL_TEXTURE_2D, texture);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, bits);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, bitmap.width, bitmap.height, 0, GL_BGRA, GL_UNSIGNED_BYTE, bitmap.bits);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -211,7 +214,6 @@ namespace
 
     glDeleteTextures(1, &texture);
   }
-
 }
 
 
@@ -333,10 +335,10 @@ void render(HandmadePlatform::PlatformInterface &platform, PushBuffer const &ren
   glUniform1i(diffuseuniform, 0);
 
   GLfloat verts[4][5] = {
-    { -0.5, +0.5, 0.0, 0.0, 0.0 },
-    { -0.5, -0.5, 0.0, 0.0, 1.0 },
-    { +0.5, +0.5, 0.0, 1.0, 0.0 },
-    { +0.5, -0.5, 0.0, 1.0, 1.0 },
+    { 0.0, 1.0, 0.0, 0.0, 0.0 },
+    { 0.0, 0.0, 0.0, 0.0, 1.0 },
+    { 1.0, 1.0, 0.0, 1.0, 0.0 },
+    { 1.0, 0.0, 0.0, 1.0, 1.0 },
   };
 
   auto glGenVertexArrays = (PFNGLGENVERTEXARRAYSPROC)platform.gl_request_proc("glGenVertexArrays");
@@ -406,37 +408,22 @@ void render(HandmadePlatform::PlatformInterface &platform, PushBuffer const &ren
         {
           auto data = renderable_cast<Renderable::Camera>(&renderable);
 
-          orthographic(&projection, -0.5*data->width, -0.5*data->height, 0.5*data->width, 0.5*data->height, 0.0f, 15.0f);
+          orthographic(&projection, data->left, data->bottom, data->right, data->top, 0.0f, 15.0f);
 
           break;
         }
 
       case Renderable::Type::Clear:
-        {
-          auto data = renderable_cast<Renderable::Clear>(&renderable);
-
-          draw_clear(platform, projection, data->color.r, data->color.g, data->color.b);
-
-          break;
-        }
+        draw_clear(platform, projection, *renderable_cast<Renderable::Clear>(&renderable));
+        break;
 
       case Renderable::Type::Rect:
-        {
-          auto data = renderable_cast<Renderable::Rect>(&renderable);
-
-          draw_rect(platform, projection, data->color.r, data->color.g, data->color.b, data->color.a);
-
-          break;
-        }
+        draw_rect(platform, projection, *renderable_cast<Renderable::Rect>(&renderable));
+        break;
 
       case Renderable::Type::Bitmap:
-        {
-          auto data = renderable_cast<Renderable::Bitmap>(&renderable);
-
-          draw_bitmap(platform, projection, data->width, data->height, data->bits);
-
-          break;
-        }
+        draw_bitmap(platform, projection, *renderable_cast<Renderable::Bitmap>(&renderable));
+        break;
     }
   }
 

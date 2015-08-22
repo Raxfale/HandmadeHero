@@ -39,6 +39,8 @@ struct PackImageHeader
 {
   uint32_t width;
   uint32_t height;
+  float alignx;
+  float aligny;
   uint64_t dataoffset;
 };
 
@@ -46,6 +48,22 @@ struct PackSoundHeader
 {
   uint32_t channels;
   uint64_t dataoffset;
+};
+
+struct PackFontHeader
+{
+  uint32_t ascent;
+  uint32_t descent;
+  uint32_t leading;
+  uint32_t datasize;
+  uint64_t dataoffset;
+};
+
+struct PackFontPayload
+{
+  uint32_t count;
+  // uint32_t type[count];
+  // uint8_t kerning[count][count];
 };
 
 #pragma pack(pop)

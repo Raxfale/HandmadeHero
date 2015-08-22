@@ -16,6 +16,7 @@ set(GAME_SRCS ${GAME_SRCS} platform.h)
 set(GAME_SRCS ${GAME_SRCS} memory.h)
 set(GAME_SRCS ${GAME_SRCS} lml.h vector.h bound.h)
 set(GAME_SRCS ${GAME_SRCS} asset.h asset.cpp)
+set(GAME_SRCS ${GAME_SRCS} rendergroup.h rendergroup.cpp)
 set(GAME_SRCS ${GAME_SRCS} renderer.h renderer.cpp renderer-gl.cpp)
 set(GAME_SRCS ${GAME_SRCS} handmade.h handmade.cpp)
 

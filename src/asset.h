@@ -25,6 +25,8 @@ enum class AssetType
 
   Tree = 0x2279,
 
+  Font = 0x2d4a,
+
 };
 
 enum class AssetTagId
@@ -70,11 +72,21 @@ class Asset
       {
         int width;
         int height;
+        float aspect;
+        float alignx;
+        float aligny;
       };
 
       struct // audio info
       {
         int channels;
+      };
+
+      struct // font info
+      {
+        uint32_t ascent;
+        uint32_t descent;
+        uint32_t leading;
       };
     };
 };
@@ -101,6 +113,9 @@ class AssetManager
     void initialise(std::vector<Asset, StackAllocator<Asset>> const &assets, std::size_t slabsize);
 
     // Find an asset by metadata
+
+    Asset const *find(AssetType type) const;
+
     template<std::size_t N = 0>
     Asset const *find(random_type &random, AssetType type, std::array<AssetTag, N> const &tags = {}, std::array<float, N> const &weights = []() { std::array<float, N> one; std::fill_n(one.data(), N, 1.0f); return one; }()) const
     {
@@ -160,7 +175,7 @@ class AssetManager
       Slot *prev;
       Slot *next;
 
-      char data[];
+      alignas(16) char data[];
     };
 
     Slot *m_head;
