@@ -195,6 +195,7 @@ void compress(const char *path)
       case 0x54455341: // ASET
       case 0x47415441: // ATAG
       case 0x52444849: // IHDR
+      case 0x52444846: // FHDR
       case 0x444e4541: // AEND
         {
           std::vector<char> buffer(chunk.length);
@@ -232,37 +233,36 @@ void compress(const char *path)
 
     switch (chunk.type)
     {
-       case 0x52444849: // IHDR
+      case 0x52444849: // IHDR
+      case 0x52444846: // FHDR
         {
-          PackImageHeader ihdr;
+          uint64_t dataoffset;
 
-          fout.read((char*)&ihdr, sizeof(ihdr));
+          fout.seekg((size_t)position + chunk.length - sizeof(uint64_t), ios::beg);
+          fout.read((char*)&dataoffset, sizeof(dataoffset));
 
-          // write compressed idat
+          // write compressed dat
 
-          PackChunk idat;
+          PackChunk dat;
 
-          fin.seekg(ihdr.dataoffset);
+          fin.seekg(dataoffset);
 
-          fin.read((char*)&idat, sizeof(idat));
+          fin.read((char*)&dat, sizeof(dat));
 
-          std::vector<char> buffer(idat.length);
+          std::vector<char> buffer(dat.length);
 
-          fin.read(buffer.data(), idat.length);
+          fin.read(buffer.data(), dat.length);
 
           fout.seekp(0, ios::end);
 
-          ihdr.dataoffset = fout.tellp();
+          dataoffset = fout.tellp();
 
-          write_compressed_chunk(fout, "IDAT", buffer.size(), buffer.data());
+          write_compressed_chunk(fout, (const char*)&dat.type, buffer.size(), buffer.data());
 
-          // rewrite ihdr
+          // rewrite hdr
 
-          fout.seekg((size_t)position - sizeof(PackChunk), ios::beg);
-
-          write_chunk(fout, "IHDR", sizeof(ihdr), &ihdr);
-
-          break;
+          fout.seekg((size_t)position + chunk.length - sizeof(uint64_t), ios::beg);
+          fout.write((char*)&dataoffset, sizeof(dataoffset));
         }
     }
 
@@ -321,7 +321,7 @@ void write_test2()
 
   fout.close();
 
-//  compress("test2.hha");
+  compress("test2.hha");
 }
 
 
@@ -336,6 +336,8 @@ void write_test3()
   write_chunk(fout, "HEND", 0, nullptr);
 
   fout.close();
+
+  compress("test3.hha");
 }
 
 

@@ -268,4 +268,13 @@ namespace lml
     return scale(v, 1 / T(s));
   }
 
+
+  //|///////////////////// swizzle //////////////////////////////////////////
+  /// swizzle
+  template<size_t... Elements, typename Vector, typename T, size_t... Indices>
+  Vector swizzle(VectorView<Vector, T, Indices...> const &v)
+  {
+    return { get<Elements>(v)... };
+  }
+
 } // namespace lml

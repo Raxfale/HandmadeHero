@@ -84,9 +84,9 @@ class Asset
 
       struct // font info
       {
-        uint32_t ascent;
-        uint32_t descent;
-        uint32_t leading;
+        int ascent;
+        int descent;
+        int leading;
       };
     };
 };
